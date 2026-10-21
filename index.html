@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>广义表探险 · 扩展链表分步可视化</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">GL</div>
+          <div class="brand-copy">
+            <h1>广义表探险</h1>
+            <p>拓展链表型广义表 · 先看步骤，再看代码</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="header-pills" aria-label="功能摘要">
+            <span class="pill">步骤快照</span>
+            <span class="pill">C 核心代码</span>
+          </div>
+          <button id="quizOpenBtn" class="pill pill-button pill-accent" type="button">经典题库</button>
+        </div>
+      </div>
+
+      <form id="caseForm" class="case-row" autocomplete="off">
+        <div class="case-picker">
+          <span class="field-label">已命名案例</span>
+          <div id="caseChips" class="case-chips" role="group" aria-label="选择已命名广义表案例"></div>
+        </div>
+        <label class="field case-name-field" for="caseNameInput">
+          <span class="field-label">案例名</span>
+          <input
+            id="caseNameInput"
+            name="caseName"
+            type="text"
+            maxlength="12"
+            spellcheck="false"
+            autocomplete="off"
+            value="A"
+            placeholder="A"
+          >
+        </label>
+        <label class="field field-expression" for="exprInput">
+          <span class="field-label">广义表表达式</span>
+          <input
+            id="exprInput"
+            name="expression"
+            type="text"
+            value="(a,(b,c),d)"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="例如：(a,(b,c),d)"
+          >
+        </label>
+        <button id="saveCaseBtn" class="btn btn-primary" type="submit">保存 / 更新案例</button>
+        <button id="newCaseBtn" class="btn btn-ghost" type="button">新建</button>
+        <span id="caseFeedback" class="case-feedback" aria-live="polite"></span>
+      </form>
+
+      <div id="errorBanner" class="error-banner" role="alert" aria-live="polite" hidden></div>
+
+      <section class="function-strip" aria-label="广义表函数链与返回值">
+        <div class="function-buttons" id="functionButtons">
+          <span class="strip-label">函数链</span>
+          <button class="btn fn-btn" type="button" data-operation="head" title="取当前表的第一个元素">GetHead</button>
+          <button class="btn fn-btn" type="button" data-operation="tail" title="取当前表首元素之后的剩余表">GetTail</button>
+          <button class="btn fn-btn" type="button" data-operation="length" title="求当前表的顶层长度">求长度</button>
+          <button class="btn fn-btn" type="button" data-operation="depth" title="求当前表的深度">求深度</button>
+          <span class="function-separator" aria-hidden="true"></span>
+          <button id="undoChainBtn" class="btn btn-control" type="button" title="撤销函数链最后一层">撤销</button>
+          <button id="resetChainBtn" class="btn btn-control" type="button" title="回到当前命名案例">重置链</button>
+        </div>
+        <div class="chain-view">
+          <span class="chain-caption">返回值</span>
+          <div id="chainTrail" class="chain-trail" aria-live="polite"></div>
+        </div>
+      </section>
+    </header>
+
+    <main class="workspace">
+      <section class="visual-column" aria-label="广义表可视化区">
+        <section class="step-panel" aria-label="当前步骤">
+          <div class="step-topline">
+            <span class="eyebrow">当前步骤</span>
+            <span id="stepCounter" class="step-counter">0 / 0</span>
+          </div>
+          <p id="stepDesc" class="step-desc">选择一个命名案例，再从函数链中选择 GetHead、GetTail、求长度或求深度。</p>
+          <p class="code-hint-row">
+            <span class="code-hint-label">高亮代码</span>
+            <code id="codeHint">等待开始…</code>
+          </p>
+        </section>
+
+        <section class="diagram-card" aria-label="节点图画布">
+          <div class="diagram-toolbar">
+            <div class="diagram-title">
+              <span class="eyebrow">节点图</span>
+              <span id="diagramSummary" class="diagram-summary">尚未生成</span>
+            </div>
+            <div class="legend" aria-label="图例">
+              <span class="legend-item"><i class="legend-dot legend-dot-atom"></i>element</span>
+              <span class="legend-item"><i class="legend-dot legend-dot-list"></i>sublist</span>
+              <span class="legend-item"><i class="legend-line legend-line-root"></i>GList</span>
+              <span class="legend-item"><i class="legend-line legend-line-child"></i>sub_list</span>
+              <span class="legend-item"><i class="legend-line legend-line-next"></i>next</span>
+            </div>
+          </div>
+          <div id="diagramViewport" class="diagram-viewport">
+            <div id="diagramStage" class="diagram-stage">
+              <div id="layerLayer" class="layer-layer" aria-hidden="true"></div>
+              <svg id="edgeLayer" class="edge-layer" aria-hidden="true">
+                <defs>
+                  <marker id="arrow-root" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path>
+                  </marker>
+                  <marker id="arrow-child" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"></path>
+                  </marker>
+                  <marker id="arrow-next" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#b45309"></path>
+                  </marker>
+                  <marker id="arrow-hot" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"></path>
+                  </marker>
+                </defs>
+              </svg>
+              <div id="nodeLayer" class="node-layer"></div>
+              <div id="laneLabel" class="lane-label" hidden>返回值</div>
+            </div>
+            <div id="canvasMetric" class="canvas-metric" hidden></div>
+            <div id="canvasEmpty" class="canvas-empty">
+              <span class="canvas-empty-mark" aria-hidden="true">( )</span>
+              <strong>节点图等待载入</strong>
+              <p>从上方选择一个命名案例，再从函数链执行 GetHead / GetTail / 求长度 / 求深度。</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="state-grid">
+          <section class="variables-panel" aria-label="变量面板">
+            <div class="panel-heading">
+              <h2>变量面板</h2>
+              <span class="panel-note">当前快照</span>
+            </div>
+            <div id="variablesList" class="variables-list">
+              <span class="muted">暂无变量</span>
+            </div>
+          </section>
+
+          <section class="result-panel" aria-label="当前结果">
+            <div class="panel-heading">
+              <h2>当前结果 / 返回值</h2>
+              <span class="panel-note">中间结果也会显示</span>
+            </div>
+            <div class="result-content">
+              <span id="resultValue" class="result-value">—</span>
+              <span id="returnNodeChip" class="return-node-chip" hidden></span>
+            </div>
+          </section>
+        </div>
+
+        <section class="playback-panel" aria-label="播放控制">
+          <div class="control-buttons">
+            <button id="resetBtn" class="btn btn-control" type="button" title="回到第一步并暂停">⟲ 重置</button>
+            <button id="rewindBtn" class="btn btn-control" type="button" title="后退 5 步">« 快退</button>
+            <button id="prevBtn" class="btn btn-control" type="button" title="上一步">‹ 上一步</button>
+            <button id="playPauseBtn" class="btn btn-control btn-play" type="button" title="播放或暂停">▶ 播放</button>
+            <button id="nextBtn" class="btn btn-control" type="button" title="下一步">下一步 ›</button>
+            <button id="forwardBtn" class="btn btn-control" type="button" title="前进 5 步">快进 »</button>
+          </div>
+          <div class="timeline-row">
+            <label class="sr-only" for="progressSlider">步骤进度</label>
+            <input id="progressSlider" class="progress-slider" type="range" min="0" max="0" step="1" value="0" disabled>
+            <label class="speed-label" for="speedSelect">速度</label>
+            <select id="speedSelect" class="speed-select">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+            <span id="stepProgressText" class="step-progress-text">—</span>
+          </div>
+        </section>
+      </section>
+
+      <aside class="code-column" aria-label="C 语言代码区">
+        <div class="code-header">
+          <div>
+            <span class="eyebrow">C 核心代码</span>
+            <h2 id="codeTitle">广义表类型定义</h2>
+          </div>
+          <span id="codeTotal" class="code-total">— 行</span>
+        </div>
+        <details id="typeDefDetails" class="type-def" open>
+          <summary>广义表类型定义（与题目代码一致）</summary>
+          <pre id="typeDefCode" class="type-def__code"></pre>
+        </details>
+        <div id="codeScroll" class="code-scroll" tabindex="0" aria-label="可滚动的当前操作核心代码">
+          <div id="codeLines" class="code-lines"></div>
+          <div id="codeEmpty" class="code-empty">
+            <strong>当前还没有执行函数</strong>
+            <span>从上方函数链选择 GetHead、GetTail、求长度或求深度，这里会显示对应核心代码。</span>
+          </div>
+        </div>
+        <p class="code-footnote">只显示操作函数，不使用辅助函数；上方定义中包含 <code>ElemSet</code>、<code>element / sublist</code> 和 <code>sub_list</code>。代码行号与左侧步骤一一对应。</p>
+      </aside>
+    </main>
+  </div>
+
+  <div id="quizModal" class="quiz-modal" hidden>
+    <div class="quiz-backdrop" data-quiz-close></div>
+    <section class="quiz-dialog" role="dialog" aria-modal="true" aria-labelledby="quizTitle" aria-describedby="quizIntro">
+      <header class="quiz-header">
+        <div class="quiz-heading">
+          <span class="eyebrow">经典题库 · 自主学习</span>
+          <h2 id="quizTitle">广义表常见考点</h2>
+          <p id="quizIntro">考研、期末与面试中的常见题型归纳。先思考，再展开答案；相关题目可以直接载入左侧分步演示。</p>
+        </div>
+        <button id="quizCloseBtn" class="btn btn-ghost quiz-close" type="button" aria-label="关闭经典题库">关闭</button>
+      </header>
+      <nav id="quizCategories" class="quiz-categories" aria-label="题库分类"></nav>
+      <div id="quizList" class="quiz-list"></div>
+      <footer class="quiz-footer">
+        <strong>深度口径提示：</strong>左侧动画采用“层数口径”（原子计 1 层）；教材的“括号重数口径”通常会少一层。题目答案中会注明两种口径。
+      </footer>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
