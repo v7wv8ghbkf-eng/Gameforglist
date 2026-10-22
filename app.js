@@ -16,6 +16,7 @@
 
   const ATOM = 'ATOM';
   const LIST = 'LIST';
+  const ROOT = 'ROOT';
 
   const MAX_INPUT_CHARS = 200;
   const MAX_NODES = 120;
@@ -65,185 +66,249 @@
     CODE_BLOCKS[key] = { key, title, lines, marks };
   }
 
-  defineCodeBlock('create', '创建 / 解析', [
-    ['/* 核心：解析入口 + 递归下降（辅助函数省略） */'],
-    ['static int ParseList(const char **s, GList list);'],
-    ['GList CreateGList(const char *s) {'],
-    ['    GList root = NewNode(LIST);               /* 根 tag = LIST */', 'rootInit', 'rootTag'],
-    ['    if (!ParseList(&s, root)) return NULL;', 'callParse'],
-    ['    return root;                              /* 解析完成 */', 'done'],
+  const TYPE_DEFINITION_SOURCE = [
+    '#include <stdio.h>',
+    '#include <stdlib.h>',
+    '',
+    'typedef enum { false, true } bool;',
+    'typedef int ElemSet;',
+    'typedef enum { element, sublist } ElemTag; /* 结点标记类型 */',
+    'typedef struct GListNode *Position;        /* 指针即结点位置 */',
+    'typedef Position GList;',
+    'struct GListNode {',
+    '    ElemTag tag;        /* 结点标记 */',
+    '    union {',
+    '        ElemSet data;   /* 存储数据 */',
+    '        GList sub_list; /* 子表 */',
+    '    } u;',
+    '    Position next;      /* 线性表中下一个元素的位置 */',
+    '};'
+  ].join('\n');
+
+  defineCodeBlock('head', 'GetHead', [
+    ['/* 核心：GetHead 返回当前 GList 的第一个结点；空表返回 NULL */'],
+    ['GList GetHead(GList L) {', 'func'],
+    ['    if (L == NULL) return NULL;', 'empty'],
+    ['    return L;', 'ret'],
     ['}'],
-    [''],
-    ['static int ParseList(const char **s, GList list) {', 'func'],
-    ['    (*s)++;                                   /* 读取并跳过 ( */', 'readOpen', 'consumeOpen'],
-    ['    while (isspace((unsigned char)**s)) (*s)++;'],
-    ["    if (**s == ')') { (*s)++; return OK; }    /* 空表返回 */", 'empty', 'emptyClose'],
-    [''],
-    ["    while (**s && **s != ')') {", 'loop'],
-    ["        if (**s == '(') {                      /* 判断：子表 */", 'classifyList'],
-    ['            GList sub = NewNode(LIST);        /* 创建 + 设置 tag */', 'createList', 'tagList'],
-    ['            AppendChild(list, sub);           /* 连接 child/next */', 'linkList'],
-    ['            if (!ParseList(s, sub)) return ERROR; /* 递归子表 */', 'enterList'],
-    ['        } else {                              /* 判断：原子 */', 'classifyAtom'],
-    ['            GList atom = NewNode(ATOM);       /* 创建 + 设置 tag */', 'createAtom', 'tagAtom'],
-    ['            atom->val.atom = **s;             /* 设置原子值 */', 'setAtom'],
-    ['            AppendChild(list, atom);          /* 连接 child/next */', 'linkAtom'],
-    ['            (*s)++;                           /* 读取下一字符 */', 'advanceAtom'],
-    ['        }'],
-    ['        while (isspace((unsigned char)**s)) (*s)++;'],
-    ["        if (**s == ',') { (*s)++; continue; }  /* 逗号：下一元素 */", 'comma'],
-    ["        if (**s == ')') { (*s)++; return OK; } /* )：返回 */", 'close', 'closeReturn'],
-    ['        return ERROR;'],
-    ['    }'],
-    ['    return ERROR;', 'eof'],
+    ['/* 返回首结点；若首结点是 sublist，其表值为 L->u.sub_list。 */']
+  ]);
+
+  defineCodeBlock('tail', 'GetTail', [
+    ['/* 核心：GetTail 返回首元素之后的剩余链；空表返回 NULL */'],
+    ['GList GetTail(GList L) {', 'func'],
+    ['    if (L == NULL) return NULL;', 'empty'],
+    ['    return L->next;', 'ret'],
     ['}']
-  ], {
-    'create.root': 'rootInit',
-    'create.done': 'done',
-    'parse.func': 'func',
-    'parse.readOpen': 'readOpen',
-    'parse.consumeOpen': 'consumeOpen',
-    'parse.empty': 'empty',
-    'parse.emptyClose': 'emptyClose',
-    'parse.emptyReturn': 'emptyClose',
-    'parse.loop': 'loop',
-    'parse.classifyList': 'classifyList',
-    'parse.createList': 'createList',
-    'parse.linkList': 'linkList',
-    'parse.enter': 'enterList',
-    'parse.classifyAtom': 'classifyAtom',
-    'parse.createAtom': 'createAtom',
-    'parse.setAtom': 'setAtom',
-    'parse.linkAtom': 'linkAtom',
-    'parse.advanceAtom': 'advanceAtom',
-    'parse.comma': 'comma',
-    'parse.close': 'close',
-    'parse.closeReturn': 'closeReturn',
-    'parse.eof': 'eof'
-  });
+  ]);
 
   defineCodeBlock('length', '求长度', [
-    ['/* 核心：顶层长度 = 从 child 开始沿 next 计数 */'],
+    ['/* 核心：长度只统计当前 GList 的同级链 */'],
     ['int GListLength(GList L) {', 'func'],
-    ['    if (L == NULL || L->tag != LIST) return 0;', 'guard'],
     ['    int len = 0;', 'init'],
-    ['    GList p = L->val.child;', 'pinit'],
+    ['    Position p = L;', 'pinit'],
     ['    while (p != NULL) {', 'loop'],
     ['        len++;', 'count'],
     ['        p = p->next;', 'next'],
     ['    }'],
     ['    return len;', 'ret'],
     ['}']
-  ], {
-    'length.func': 'func',
-    'length.guard': 'guard',
-    'length.init': 'init',
-    'length.pinit': 'pinit',
-    'length.loop': 'loop',
-    'length.count': 'count',
-    'length.next': 'next',
-    'length.return': 'ret'
-  });
+  ]);
 
   defineCodeBlock('depth', '求深度', [
-    ['/* 核心：本页层数口径——空表 1，原子 1，表 = 1 + max(子项) */'],
+    ['/* 核心：本页层数口径；空链 1 层，元素 1 层，子表递归 */'],
     ['int GListDepth(GList L) {', 'func'],
-    ['    if (L == NULL) return 1;                     /* 空表 */', 'null'],
-    ['    if (L->tag == ATOM) return 1;                /* 原子 */', 'atom'],
-    ['    if (L->val.child == NULL) return 1;          /* 空表 () */', 'empty'],
-    ['    int maxDepth = 0;                            /* 最大子深度 */', 'initMax'],
-    ['    for (GList p = L->val.child; p; p = p->next) {', 'loop'],
-    ['        int childDepth = GListDepth(p);          /* 递归 child */', 'call'],
-    ['        if (childDepth > maxDepth)               /* 比较 */', 'compare'],
-    ['            maxDepth = childDepth;               /* 更新 */', 'update'],
+    ['    if (L == NULL) return 1;', 'null'],
+    ['    int max = 0;', 'init'],
+    ['    for (Position p = L; p != NULL; p = p->next) {', 'loop'],
+    ['        int d;'],
+    ['        if (p->tag == element)', 'atom'],
+    ['            d = 1;', 'setAtom'],
+    ['        else', 'else'],
+    ['            d = GListDepth(p->u.sub_list);', 'recurse'],
+    ['        if (d > max)', 'compare'],
+    ['            max = d;', 'update'],
     ['    }'],
-    ['    return maxDepth + 1;                         /* 本层 + 1 */', 'ret'],
+    ['    return max + 1;', 'ret'],
     ['}']
-  ], {
-    'depth.func': 'func',
-    'depth.null': 'null',
-    'depth.atom': 'atom',
-    'depth.empty': 'empty',
-    'depth.initMax': 'initMax',
-    'depth.loop': 'loop',
-    'depth.call': 'call',
-    'depth.compare': 'compare',
-    'depth.update': 'update',
-    'depth.return': 'ret'
-  });
+  ]);
 
-  defineCodeBlock('head', '取表头', [
-    ['/* 核心：表头 = 根节点的 child */'],
+  const HT_TYPE_DEFINITION_SOURCE = [
+    '#include <stdio.h>',
+    '#include <stdlib.h>',
+    '',
+    'typedef enum { false, true } bool;',
+    'typedef int ElemSet;',
+    'typedef enum { ATOM, LIST } NodeTag; /* 结点类型 */',
+    'typedef struct HTNode *GList;',
+    'struct HTNode {',
+    '    NodeTag tag;',
+    '    union {',
+    '        ElemSet data;',
+    '        struct {',
+    '            GList hp; /* 表头 */',
+    '            GList tp; /* 表尾 */',
+    '        } ptr;',
+    '    } u;',
+    '};'
+  ].join('\n');
+
+  defineCodeBlock('htHead', 'GetHead', [
+    ['/* 头尾链表：表头就是首结点 hp 指向的结点 */'],
     ['GList GetHead(GList L) {', 'func'],
-    ['    if (L == NULL || L->tag != LIST || L->val.child == NULL)', 'empty'],
-    ['        return NULL;                         /* 空表没有表头 */'],
-    ['    return L->val.child;                    /* 返回第一个元素 */', 'ret'],
+    ['    if (L == NULL) return NULL;', 'empty'],
+    ['    return L->u.ptr.hp;', 'ret'],
     ['}']
-  ], {
-    'head.func': 'func',
-    'head.empty': 'empty',
-    'head.return': 'ret'
-  });
+  ]);
 
-  defineCodeBlock('tail', '取表尾', [
-    ['/* 核心：表尾 = 首元素之后，需新建一个返回表头 */'],
+  defineCodeBlock('htTail', 'GetTail', [
+    ['/* 头尾链表：表尾就是首结点 tp 指向的剩余链 */'],
     ['GList GetTail(GList L) {', 'func'],
-    ['    if (L == NULL || L->tag != LIST || L->val.child == NULL)', 'empty'],
-    ['        return NULL;                         /* 空表没有表尾 */'],
-    ['    GList first = L->val.child;              /* 首元素 */', 'first'],
-    ['    GList tail = NewNode(LIST);              /* 新建返回表头 */', 'new'],
-    ['    tail->val.child = first->next;           /* 共享剩余链 */', 'link'],
-    ['    return tail;                             /* 返回新表头 */', 'ret'],
+    ['    if (L == NULL) return NULL;', 'empty'],
+    ['    return L->u.ptr.tp;', 'ret'],
     ['}']
-  ], {
-    'tail.func': 'func',
-    'tail.empty': 'empty',
-    'tail.first': 'first',
-    'tail.new': 'new',
-    'tail.link': 'link',
-    'tail.return': 'ret'
-  });
+  ]);
 
-  defineCodeBlock('traverse', '遍历', [
-    ['/* 核心：先序访问原子，表节点只作为路径 */'],
-    ['void Traverse(GList L) {', 'func'],
-    ['    if (L == NULL) return;', 'entry'],
-    ['    if (L->tag == ATOM) {                    /* 判断：原子 */', 'atom'],
-    ['        printf("%c ", L->val.atom);          /* 访问原子 */', 'print'],
-    ['        return;'],
+  defineCodeBlock('htLength', '求长度', [
+    ['/* 沿表尾 tp 走完整条同级链 */'],
+    ['int GListLength(GList L) {', 'func'],
+    ['    int len = 0;', 'init'],
+    ['    while (L != NULL) {', 'loop'],
+    ['        len++;', 'count'],
+    ['        L = L->u.ptr.tp;', 'next'],
     ['    }'],
-    ['    for (GList p = L->val.child; p; p = p->next) {', 'loop'],
-    ['        Traverse(p);                         /* 递归 child/next */', 'call'],
-    ['    }'],
+    ['    return len;', 'ret'],
     ['}']
-  ], {
-    'traverse.func': 'func',
-    'traverse.entry': 'entry',
-    'traverse.atom': 'atom',
-    'traverse.print': 'print',
-    'traverse.loop': 'loop',
-    'traverse.call': 'call'
-  });
+  ]);
+
+  defineCodeBlock('htDepth', '求深度', [
+    ['/* 头尾链表：hp 可能指向 ATOM，也可能指向子表 LIST */'],
+    ['int GListDepth(GList L) {', 'func'],
+    ['    if (L == NULL) return 1;', 'null'],
+    ['    int max = 0;', 'init'],
+    ['    while (L != NULL) {', 'loop'],
+    ['        GList h = L->u.ptr.hp;', 'hp'],
+    ['        int d;'],
+    ['        if (h == NULL || h->tag == ATOM)', 'atom'],
+    ['            d = 1;', 'setAtom'],
+    ['        else', 'else'],
+    ['            d = GListDepth(h);', 'recurse'],
+    ['        if (d > max) max = d;', 'compare'],
+    ['        L = L->u.ptr.tp;', 'next'],
+    ['    }'],
+    ['    return max + 1;', 'ret'],
+    ['}']
+  ]);
+
+  defineCodeBlock('htBuild', 'BuildList', [
+    ['/* 头尾链表：先建当前结点，再递归 hp 与 tp */'],
+    ['GList BuildList(int n) {', 'func'],
+    ['    if (n == 0) return NULL;', 'empty'],
+    ['    GList p = malloc(sizeof(struct HTNode));', 'alloc'],
+    ['    int k; scanf("%d", &k);', 'read'],
+    ['    p->tag = LIST;', 'tagList'],
+    ['    if (k == 0) {', 'atom'],
+    ['        GList a = malloc(sizeof(struct HTNode));', 'allocAtom'],
+    ['        a->tag = ATOM;', 'tagAtom'],
+    ['        scanf("%d", &a->u.data);', 'data'],
+    ['        p->u.ptr.hp = a;', 'linkHp'],
+    ['    } else {', 'else'],
+    ['        p->u.ptr.hp = BuildList(k > 0 ? k : 0);', 'recurseHp'],
+    ['    }'],
+    ['    p->u.ptr.tp = BuildList(n - 1);', 'recurseTp'],
+    ['    return p;', 'ret'],
+    ['}']
+  ]);
+
+  (function () {
+    defineCodeBlock('htEqual', 'IsEqual', [
+        ['    bool IsEqual(GList a, GList b) {', 'funcStart'],
+        ['        // 都为空表', 'comment'],
+        ['        if (a == NULL && b == NULL)', 'empty'],
+        ['            return true;', 'retTrue'],
+        [''],
+        ['        // 一空一非空', 'comment'],
+        ['        if (a == NULL || b == NULL)', 'oneEmpty'],
+        ['            return false;', 'retFalse'],
+        [''],
+        ['        // 类型不同', 'comment'],
+        ['        if (a->tag != b->tag)', 'tag'],
+        ['            return false;', 'failTag'],
+        [''],
+        ['        // 都是原子，比较值', 'comment'],
+        ['        if (a->tag == element)', 'atom'],
+        ['            return a->u.data == b->u.data;', 'data'],
+        [''],
+        ['        // 都是表，递归比较表头(hp)与表尾(tp)', 'comment'],
+        ['        return IsEqual(a->u.ptr.hp, b->u.ptr.hp)', 'recurseHp'],
+        ['            && IsEqual(a->u.ptr.tp, b->u.ptr.tp);', 'recurseTp'],
+        ['    }', 'funcEnd']
+    ]);
+})();
+
+  defineCodeBlock('build', 'BuildList', [
+    ['/* k=0 原子；k>0 子表；k=-1 空子表（演示扩展） */'],
+    ['GList BuildList(int n) {', 'func'],
+    ['    GList dummy = malloc(sizeof(struct GListNode)), tail = dummy;', 'init'],
+    ['    dummy->next = NULL;', 'dummy'],
+    ['    while (n-- > 0) {', 'loop'],
+    ['        GList p = malloc(sizeof(struct GListNode));', 'alloc'],
+    ['        int k;'],
+    ['        scanf("%d", &k);', 'read'],
+    ['        p->tag = (k == 0) ? element : sublist;', 'tag'],
+    ['        if (p->tag == element) {', 'atom'],
+    ['            scanf("%d", &p->u.data);', 'data'],
+    ['        } else {', 'else'],
+    ['            p->u.sub_list = BuildList(k > 0 ? k : 0);', 'recurse'],
+    ['        }', 'afterSub'],
+    ['        tail->next = p;', 'link'],
+    ['        p->next = NULL;', 'next'],
+    ['        tail = p;', 'tail'],
+    ['    }'],
+    ['    GList head = dummy->next; free(dummy);', 'free', 'head'],
+    ['    return head;', 'ret'],
+    ['}']
+  ]);
+
+  defineCodeBlock('equal', 'IsEqual', [
+    ['bool IsEqual( GList glist1, GList glist2 )', 'func'],
+    ['{'],
+    ['    // Lists are all empty.'],
+    ['    if (glist1 == NULL && glist2 == NULL)', 'empty'],
+    ['        return true;', 'retTrue'],
+    [''],
+    ['    // There\'s one who arrives at the end first.'],
+    ['    if (glist1 == NULL || glist2 == NULL)', 'oneEmpty'],
+    ['        return false;', 'retFalse'],
+    [''],
+    ['    // Present tag is different.'],
+    ['    if (glist1 -> tag != glist2 -> tag)', 'tag'],
+    ['        return false;', 'failTag'],
+    [''],
+    [''],
+    ['    if (glist1 -> tag == element)', 'atom'],
+    ['    {'],
+    ['        if (glist1 -> u.data != glist2 -> u.data)', 'data'],
+    ['            return false;', 'failData'],
+    ['    }'],
+    ['    else'],
+    ['    {'],
+    ['        if (!IsEqual(glist1 -> u.sub_list, glist2 -> u.sub_list))', 'recurse'],
+    ['            return false;', 'failSub'],
+    ['    }'],
+    [''],
+    ['    return IsEqual(glist1 -> next, glist2 -> next);', 'next', 'ret'],
+    ['}']
+  ]);
 
   const OPERATIONS = [
-    { key: 'create', label: '创建 / 解析', short: '创建' },
+    { key: 'head', label: 'GetHead', short: '表头' },
+    { key: 'tail', label: 'GetTail', short: '表尾' },
     { key: 'length', label: '求长度', short: '长度' },
-    { key: 'depth', label: '求深度', short: '深度' },
-    { key: 'head', label: '取表头', short: '表头' },
-    { key: 'tail', label: '取表尾', short: '表尾' },
-    { key: 'traverse', label: '遍历', short: '遍历' }
+    { key: 'depth', label: '求深度', short: '深度' }
   ];
 
   const OPERATION_BY_KEY = Object.fromEntries(OPERATIONS.map((op) => [op.key, op]));
-
-  const READY_MESSAGES = {
-    create: '点击“开始演示”，观察广义表如何从根节点逐步构建。',
-    length: '点击“开始演示”，从 child 链头开始统计顶层元素个数。',
-    depth: '点击“开始演示”，递归比较 child 子树的深度；图层会标出层数。',
-    head: '点击“开始演示”，沿根节点的 child 指针取表头。',
-    tail: '点击“开始演示”，取首元素之后的剩余元素组成表尾。',
-    traverse: '点击“开始演示”，按先序顺序逐个访问原子节点。'
-  };
 
   const QUIZ_CATEGORIES = ['全部', '考研', '考试', '面试'];
 
@@ -257,9 +322,8 @@
       answer: '长度 = 3\n表头 = a\n表尾 = ((b,c),d)\n原子遍历 = a → b → c → d',
       note: '表头是第一个元素；表尾不是“最后一个元素”，而是首元素之后所有元素重新组成的一张表。',
       demos: [
-        { label: '解析结构', expression: '(a,(b,c),d)', operation: 'create' },
-        { label: '演示表尾', expression: '(a,(b,c),d)', operation: 'tail' },
-        { label: '演示遍历', expression: '(a,(b,c),d)', operation: 'traverse' }
+        { label: '演示表头', expression: '(a,(b,c),d)', operation: 'head' },
+        { label: '演示表尾', expression: '(a,(b,c),d)', operation: 'tail' }
       ]
     },
     {
@@ -283,8 +347,8 @@
       answer: '长度 = 0\n深度 = 1（教材口径与本页层数口径都为 1）\n表头、表尾：未定义（空表没有首元素）',
       note: '空表是一个合法的括号表，但不能再取表头；取表尾也没有剩余元素。实现时应显式返回 NULL 或错误状态。',
       demos: [
-        { label: '演示空表解析', expression: '()', operation: 'create' },
-        { label: '演示取表头', expression: '()', operation: 'head' }
+        { label: '演示空表求长度', expression: '()', operation: 'length' },
+        { label: '演示空表取表头', expression: '()', operation: 'head' }
       ]
     },
     {
@@ -309,8 +373,7 @@
       answer: '顶层长度 = 4（x、(y,z)、(p,(q))、r）\n原子总数 = 6（x、y、z、p、q、r）\n遍历序列 = x, y, z, p, q, r',
       note: '长度只统计根表 first-level 的元素个数，不会递归进入子表；原子总数需要完整遍历。',
       demos: [
-        { label: '演示求长度', expression: '(x,(y,z),(p,(q)),r)', operation: 'length' },
-        { label: '演示遍历', expression: '(x,(y,z),(p,(q)),r)', operation: 'traverse' }
+        { label: '演示求长度', expression: '(x,(y,z),(p,(q)),r)', operation: 'length' }
       ]
     },
     {
@@ -319,11 +382,11 @@
       topic: '存储表示',
       title: '扩展线性链表表示法',
       question: '用扩展线性链表表示广义表时，一个节点通常需要哪些字段？如何区分原子和子表？',
-      answer: '核心字段：tag、联合体（atom 或 child）、next。',
-      code: 'typedef enum { ATOM, LIST } ElemTag;\ntypedef struct GLNode {\n    ElemTag tag;\n    union {\n        char atom;\n        struct GLNode *child;\n    } val;\n    struct GLNode *next;\n} GLNode, *GList;',
-      note: 'tag = ATOM 时读取 atom；tag = LIST 时 child 指向子表首元素。next 统一连接同级下一元素。',
+      answer: '核心字段：tag、联合体（data 或 sub_list）、next。',
+      code: 'typedef int ElemSet;\ntypedef enum { element, sublist } ElemTag;\ntypedef struct GListNode *Position;\ntypedef Position GList;\nstruct GListNode {\n    ElemTag tag;\n    union {\n        ElemSet data;\n        GList sub_list;\n    } u;\n    Position next;\n};',
+      note: 'tag = element 时读取 data；tag = sublist 时 u.sub_list 指向子表首结点。next 统一连接同级下一元素。',
       demos: [
-        { label: '看节点结构动画', expression: '(a,(b,c),d)', operation: 'create' }
+        { label: '观察 first-level 链', expression: '(a,(b,c),d)', operation: 'length' }
       ]
     },
     {
@@ -333,8 +396,8 @@
       title: '手写广义表求深度',
       question: '写出广义表求深度的递归实现，并分析时间与空间复杂度。',
       answer: '每个节点访问一次，时间复杂度 O(n)；递归栈深度不超过最大层数 d，空间复杂度 O(d)。',
-      code: 'int GListDepth(GList L) {\n    if (L == NULL) return 1;\n    if (L->tag == ATOM) return 1;\n    int maxDepth = 0;\n    for (GList p = L->val.child; p; p = p->next) {\n        int d = GListDepth(p);\n        if (d > maxDepth) maxDepth = d;\n    }\n    return maxDepth + 1;\n}',
-      note: '上面是本页层数口径的实现；若改用教材口径，把空表和原子的返回值改成 0 即可。',
+      code: 'int GListDepth(GList L) {\n    if (L == NULL) return 1;\n    int max = 0;\n    for (Position p = L; p != NULL; p = p->next) {\n        int d;\n        if (p->tag == element) d = 1;\n        else d = GListDepth(p->u.sub_list);\n        if (d > max) max = d;\n    }\n    return max + 1;\n}',
+      note: '上面是本页层数口径的实现；若改用教材口径，可以把深度基例改为 0。',
       demos: [
         { label: '观察递归过程', expression: '(a,(b,c),d)', operation: 'depth' }
       ]
@@ -345,12 +408,10 @@
       topic: '遍历设计',
       title: '展平广义表',
       question: '如何按先序输出广义表中的所有原子？为什么表节点不需要被输出？',
-      answer: '对原子节点直接输出；对表节点遍历它的 child 链，对每个子项递归。表节点只描述结构，不承载原子值，因此只作为递归路径。',
-      code: 'void Traverse(GList L) {\n    if (L == NULL) return;\n    if (L->tag == ATOM) {\n        printf("%c ", L->val.atom);\n        return;\n    }\n    for (GList p = L->val.child; p; p = p->next)\n        Traverse(p);\n}',
-      note: '遍历访问每个节点一次，时间复杂度 O(n)。若需要保存结果，可以把 printf 替换为写入数组或字符串。',
-      demos: [
-        { label: '观察访问顺序', expression: '(a,(b,c),d)', operation: 'traverse' }
-      ]
+      answer: '对 element 结点输出 data；对 sublist 结点递归遍历它的 u.sub_list 链。sublist 结点只描述结构，不承载数据。',
+      code: 'void Traverse(GList L) {\n    for (Position p = L; p != NULL; p = p->next) {\n        if (p->tag == element)\n            printf("%d ", p->u.data);\n        else\n            Traverse(p->u.sub_list);\n    }\n}',
+      note: '遍历访问每个结点一次，时间复杂度 O(n)。本题是概念练习；本页顶部还支持 BuildList 创建过程、GetHead/GetTail 嵌套和两表判等演示。',
+      demos: []
     },
     {
       id: 'ms-3',
@@ -361,7 +422,7 @@
       answer: '必须防止重复进入同一个子表或无限递归。常见做法是：限制不允许自引用；或者使用 visited 集合记录已进入的节点，遇到环时停止并报告。',
       note: '本教学页的输入只支持从字符串构造的有限树，不会生成环；但真实项目中若允许共享子表或手工构造节点，就必须考虑环检测与内存所有权。',
       demos: [
-        { label: '复习 child/next 关系', expression: '(a,(b,c),d)', operation: 'create' }
+        { label: '观察 next 指针', expression: '(a,(b,c),d)', operation: 'tail' }
       ]
     }
   ];
@@ -402,12 +463,15 @@
     if (Object.keys(graph.nodes).length >= MAX_NODES) {
       throw new ParseError(`节点数量超过 ${MAX_NODES} 个，请简化表达式。`, opts.position);
     }
-    const prefix = kind === ATOM ? 'A' : (opts.prefix || 'L');
+    const prefix = kind === ATOM ? 'E' : (opts.prefix || 'S');
     const id = prefix + (graph.seq += 1);
     const node = {
       id,
       tag: null,
+      root: !!opts.root,
+      name: '',
       value: null,
+      data: null,
       child: null,
       next: null,
       synthetic: !!opts.synthetic,
@@ -474,7 +538,10 @@
       return {
         id: node.id,
         tag: node.tag,
+        root: !!node.root,
+        name: node.name || '',
         value: node.value,
+        data: node.data,
         child: node.child,
         next: node.next,
         synthetic: !!node.synthetic
@@ -488,15 +555,22 @@
   }
 
   function makeStep(graph, spec, marks) {
-    const lineMarks = marks || CODE_BLOCKS.create.marks;
+    if (!marks) {
+      throw new Error('内部错误：步骤缺少所属代码块。');
+    }
+    const lineMarks = marks;
     const codeLine = lineMarks[spec.line];
     if (!codeLine) {
       throw new Error(`内部错误：未知代码行标记 ${spec.line}`);
     }
+    const allNodes = snapshotNodes(graph);
+    const nodes = spec.visibleIds
+      ? allNodes.filter((node) => spec.visibleIds.has(node.id))
+      : allNodes;
     const step = {
       desc: spec.desc,
       codeLine,
-      nodes: snapshotNodes(graph),
+      nodes,
       highlightNodeIds: Array.from(new Set(spec.highlightNodeIds || [])),
       highlightPointers: Array.from(new Set(spec.highlightPointers || [])),
       variables: cloneVariables(spec.variables),
@@ -520,7 +594,6 @@
 
   function parseExpression(source, options) {
     const opts = options || {};
-    const trace = !!opts.trace;
     const text = source == null ? '' : String(source);
     const chars = Array.from(text);
 
@@ -536,16 +609,14 @@
       rootId: null,
       seq: 0
     };
-    const steps = [];
     const ctx = {
       chars,
       pos: 0,
       graph
     };
 
-    const record = (spec) => {
-      if (trace) steps.push(makeStep(graph, spec, CODE_BLOCKS.create.marks));
-    };
+    // 前端解析只负责构造 GList；解析过程不作为 C 操作函数展示。
+    const record = () => {};
     const fail = (message, position) => {
       throw new ParseError(message, position == null ? ctx.pos : position);
     };
@@ -558,25 +629,15 @@
       throw new ParseError('顶层广义表必须以左括号 "(" 开头。', ctx.pos);
     }
 
-    const root = createGraphNode(graph, LIST, { position: ctx.pos });
+    const root = createGraphNode(graph, LIST, {
+      position: ctx.pos,
+      prefix: 'R',
+      root: true
+    });
     graph.rootId = root.id;
-
-    record({
-      desc: '分配根节点，准备开始解析。',
-      line: 'create.root',
-      highlightNodeIds: [root.id],
-      variables: { root: root.id, tag: '未设置', pos: ctx.pos + 1 },
-      result: '已分配根节点'
-    });
-
-    root.tag = LIST;
-    record({
-      desc: '设置根节点 tag = LIST。',
-      line: 'rootTag',
-      highlightNodeIds: [root.id],
-      variables: { root: root.id, tag: 'LIST', pos: ctx.pos + 1 },
-      result: '根表已就绪'
-    });
+    root.tag = ROOT;
+    root.root = true;
+    root.name = opts.name || '表';
 
     parseListContents(ctx, root, 1, record, fail);
 
@@ -596,7 +657,7 @@
       result: serializeGraph(graph)
     });
 
-    return { graph, steps };
+    return { graph };
   }
 
   function parseListContents(ctx, listNode, level, record, fail) {
@@ -756,6 +817,7 @@
         });
 
         atom.value = ch;
+        atom.data = /^\d$/.test(ch) ? Number(ch) : ch.charCodeAt(0);
         record({
           desc: `保存原子值 "${ch}"。`,
           line: 'parse.setAtom',
@@ -840,586 +902,509 @@
   }
 
   /* ===========================================================
-     操作步骤生成器
+     函数结果与步骤生成
      =========================================================== */
 
-  function generateOperationSteps(operation, graph) {
-    const codeBlock = CODE_BLOCKS[operation];
-    switch (operation) {
-      case 'length':
-        return generateLengthSteps(graph, codeBlock);
-      case 'depth':
-        return generateDepthSteps(graph, codeBlock);
-      case 'head':
-        return generateHeadSteps(graph, codeBlock);
-      case 'tail':
-        return generateTailSteps(graph, codeBlock);
-      case 'traverse':
-        return generateTraverseSteps(graph, codeBlock);
-      default:
-        throw new Error(`不支持的操作：${operation}`);
+  function serializeChain(graph, headId) {
+    const parts = [];
+    let id = headId;
+    while (id) {
+      const node = graph.nodes[id];
+      if (!node) break;
+      if (node.tag === ATOM) {
+        parts.push(node.value == null ? '' : node.value);
+      } else {
+        parts.push(serializeListContents(graph, node.id));
+      }
+      id = node.next || null;
     }
+    return '(' + parts.join(',') + ')';
   }
 
-  function generateLengthSteps(graph, codeBlock) {
-    const steps = [];
-    const counted = Object.create(null);
-    const push = (spec) => {
-      steps.push(makeStep(graph, {
-        ...spec,
-        nodeBadges: { ...counted, ...(spec.nodeBadges || {}) }
-      }, codeBlock.marks));
+  function chainIds(graph, headId) {
+    const ids = [];
+    let id = headId;
+    while (id && graph.nodes[id]) {
+      ids.push(id);
+      id = graph.nodes[id].next || null;
+    }
+    return ids;
+  }
+
+  function chainLength(graph, headId) {
+    return chainIds(graph, headId).length;
+  }
+
+  function chainDepth(graph, headId) {
+    if (!headId) return 1;
+    let max = 0;
+    let id = headId;
+    while (id && graph.nodes[id]) {
+      const node = graph.nodes[id];
+      const d = node.tag === ATOM ? 1 : chainDepth(graph, node.child);
+      if (d > max) max = d;
+      id = node.next || null;
+    }
+    return max + 1;
+  }
+
+  function operationName(operation) {
+    if (operation === 'head') return 'GetHead';
+    if (operation === 'tail') return 'GetTail';
+    if (operation === 'length') return 'GListLength';
+    if (operation === 'depth') return 'GListDepth';
+    return operation;
+  }
+
+  function makeListSubject(graph, headId, exprLabel, sourcePointer) {
+    return {
+      kind: 'list',
+      headId: headId || null,
+      valueText: serializeChain(graph, headId || null),
+      exprLabel,
+      sourcePointer: sourcePointer || null
     };
-    const rootId = graph.rootId;
-    const root = graph.nodes[rootId];
+  }
+
+  /**
+   * 计算一次函数调用后的当前对象和显示值。
+   * 内部使用 GList 链语义：GetHead 返回首结点，GetTail 返回 L->next。
+   */
+  function evaluateOperation(graph, subject, operation) {
+    if (!subject || subject.kind !== 'list') {
+      throw new Error('当前对象不是广义表，不能继续应用该函数。');
+    }
+
+    const label = operationName(operation) + '(' + subject.exprLabel + ')';
+    const headId = subject.headId || null;
+
+    if (operation === 'head') {
+      if (!headId) {
+        return {
+          label,
+          resultText: '空表没有表头',
+          subject: {
+            kind: 'undefined',
+            valueText: '空表没有表头',
+            exprLabel: label
+          }
+        };
+      }
+      const node = graph.nodes[headId];
+      if (node.tag === ATOM) {
+        return {
+          label,
+          resultText: node.value == null ? '' : node.value,
+          subject: {
+            kind: 'atom',
+            atomId: headId,
+            valueText: node.value == null ? '' : node.value,
+            exprLabel: label
+          }
+        };
+      }
+      return {
+        label,
+        resultText: serializeChain(graph, node.child),
+        subject: makeListSubject(
+          graph,
+          node.child,
+          label,
+          node.child ? node.id + '.child' : null
+        )
+      };
+    }
+
+    if (operation === 'tail') {
+      if (!headId) {
+        return {
+          label,
+          resultText: '()',
+          subject: makeListSubject(graph, null, label, null)
+        };
+      }
+      const node = graph.nodes[headId];
+      const nextId = node.next || null;
+      return {
+        label,
+        resultText: serializeChain(graph, nextId),
+        subject: makeListSubject(
+          graph,
+          nextId,
+          label,
+          nextId ? headId + '.next' : null
+        )
+      };
+    }
+
+    if (operation === 'length') {
+      const len = chainLength(graph, headId);
+      return {
+        label,
+        resultText: String(len),
+        subject: {
+          kind: 'number',
+          valueText: String(len),
+          exprLabel: label
+        }
+      };
+    }
+
+    if (operation === 'depth') {
+      const depth = chainDepth(graph, headId);
+      return {
+        label,
+        resultText: String(depth),
+        subject: {
+          kind: 'number',
+          valueText: String(depth),
+          exprLabel: label
+        }
+      };
+    }
+
+    throw new Error('不支持的操作：' + operation);
+  }
+
+  function generateOperationSteps(operation, graph, subject) {
+    const codeBlock = CODE_BLOCKS[operation];
+    if (!codeBlock) throw new Error('未知操作：' + operation);
+    if (!subject || subject.kind !== 'list') {
+      throw new Error('当前对象不是广义表。');
+    }
+
+    if (operation === 'head') return generateHeadSteps(graph, subject, codeBlock);
+    if (operation === 'tail') return generateTailSteps(graph, subject, codeBlock);
+    if (operation === 'length') return generateLengthSteps(graph, subject, codeBlock);
+    if (operation === 'depth') return generateDepthSteps(graph, subject, codeBlock);
+    throw new Error('不支持的操作：' + operation);
+  }
+
+  function generateHeadSteps(graph, subject, codeBlock) {
+    const steps = [];
+    const push = (spec) => steps.push(makeStep(graph, spec, codeBlock.marks));
+    const headId = subject.headId || null;
 
     push({
-      desc: '准备求长度：从根节点的 child 指针开始，沿 next 链统计元素。',
-      line: 'length.func',
-      highlightNodeIds: [rootId],
-      variables: { p: root.child || 'NULL', len: 0, rule: '只数顶层元素' },
-      result: 'len = 0'
+      desc: '准备执行 GetHead：当前对象是 ' + subject.exprLabel + '。',
+      line: 'func',
+      highlightNodeIds: headId ? [headId] : [],
+      highlightPointers: subject.sourcePointer ? [subject.sourcePointer] : [],
+      variables: { L: headId || 'NULL', 当前值: subject.valueText },
+      result: '当前值 ' + subject.valueText
     });
-
-    let len = 0;
-    let currentId = root.child;
-    const firstPointer = currentId ? `${rootId}.child` : null;
 
     push({
-      desc: currentId
-        ? `初始化 p = ${rootId}.child，指向第一个顶层元素 ${currentId}。`
-        : `${rootId}.child 为 NULL，这是一个空表。`,
-      line: 'length.pinit',
-      highlightNodeIds: currentId ? [currentId] : [rootId],
-      highlightPointers: firstPointer ? [firstPointer] : [],
-      variables: { p: currentId || 'NULL', len: 0 },
-      result: currentId ? `p = ${currentId}` : 'p = NULL'
+      desc: headId ? 'L 非空，第一个结点就是表头。' : 'L 为 NULL，空表没有表头。',
+      line: 'empty',
+      highlightNodeIds: headId ? [headId] : [],
+      highlightPointers: subject.sourcePointer ? [subject.sourcePointer] : [],
+      variables: { L: headId || 'NULL' },
+      result: headId ? '继续返回第一个结点' : '返回 NULL / 无表头'
     });
 
-    let previousId = null;
-    while (currentId) {
-      const current = graph.nodes[currentId];
-      len += 1;
-      counted[currentId] = `#${len}`;
+    if (!headId) {
       push({
-        desc: `p 指向 ${currentId}，不为 NULL，len 加 1。`,
-        line: 'length.count',
-        highlightNodeIds: [currentId],
-        highlightPointers: previousId ? [`${previousId}.next`] : [firstPointer].filter(Boolean),
-        variables: { p: currentId, len },
-        result: `len = ${len}`
+        desc: 'GetHead 返回 NULL：空表没有表头。',
+        line: 'empty',
+        highlightNodeIds: [],
+        highlightPointers: [],
+        variables: { L: 'NULL' },
+        result: '空表没有表头'
       });
+      return steps;
+    }
 
-      const nextId = current.next;
-      push({
-        desc: nextId
-          ? `沿 ${currentId}.next 移动到下一个元素 ${nextId}。`
-          : `${currentId}.next 为 NULL，child 链到达末尾。`,
-        line: nextId ? 'length.next' : 'length.loop',
-        highlightNodeIds: nextId ? [nextId] : [currentId],
-        highlightPointers: nextId ? [`${currentId}.next`] : [],
-        variables: { p: nextId || 'NULL', len },
-        result: nextId ? `p = ${nextId}` : 'p = NULL，循环结束'
-      });
-
-      previousId = currentId;
-      currentId = nextId;
+    const node = graph.nodes[headId];
+    const pointers = subject.sourcePointer ? [subject.sourcePointer] : [];
+    if (node.tag !== ATOM && node.child) {
+      pointers.push(node.id + '.child');
     }
 
     push({
-      desc: `循环结束，返回累计的顶层元素个数 ${len}。`,
-      line: 'length.return',
-      highlightNodeIds: [rootId],
-      variables: { len, p: 'NULL' },
-      result: `长度 = ${len}`
+      desc: '返回第一个结点 ' + headId + '，它表示的值是 ' + (node.tag === ATOM ? node.value : serializeChain(graph, node.child)) + '。',
+      line: 'ret',
+      highlightNodeIds: [headId],
+      highlightPointers: pointers,
+      variables: { L: headId, tag: node.tag === ATOM ? 'element' : 'sublist' },
+      result: node.tag === ATOM ? node.value : serializeChain(graph, node.child),
+      returnedNodeId: headId
     });
 
     return steps;
   }
 
-  function generateDepthSteps(graph, codeBlock) {
+  function generateTailSteps(graph, subject, codeBlock) {
     const steps = [];
-    const depths = Object.create(null);
-    const push = (spec) => {
-      steps.push(makeStep(graph, {
-        ...spec,
-        nodeBadges: { ...depths, ...(spec.nodeBadges || {}) }
-      }, codeBlock.marks));
-    };
-    const rootId = graph.rootId;
+    const push = (spec) => steps.push(makeStep(graph, spec, codeBlock.marks));
+    const headId = subject.headId || null;
 
     push({
-      desc: '准备求深度。本游戏按层数口径：空表 1，原子 1，表 = 1 + 最大子项深度。',
-      line: 'depth.func',
-      highlightNodeIds: [rootId],
-      variables: { current: rootId, rule: '1 + max(子项)' },
-      result: '等待递归'
+      desc: '准备执行 GetTail：当前对象是 ' + subject.exprLabel + '。',
+      line: 'func',
+      highlightNodeIds: headId ? [headId] : [],
+      highlightPointers: subject.sourcePointer ? [subject.sourcePointer] : [],
+      variables: { L: headId || 'NULL', 当前值: subject.valueText },
+      result: '当前值 ' + subject.valueText
     });
 
-    function visit(nodeId, stack) {
-      const node = graph.nodes[nodeId];
-      const nextStack = stack.concat(nodeId);
-      const stackText = nextStack.join(' > ');
+    push({
+      desc: headId ? 'L 非空，沿 next 取剩余链。' : 'L 为 NULL，返回空表。',
+      line: 'empty',
+      highlightNodeIds: headId ? [headId] : [],
+      highlightPointers: subject.sourcePointer ? [subject.sourcePointer] : [],
+      variables: { L: headId || 'NULL' },
+      result: headId ? '继续返回 L->next' : '返回 NULL'
+    });
 
-      if (!node) {
+    if (!headId) {
+      push({
+        desc: 'GetTail 返回 NULL，表示空表。',
+        line: 'empty',
+        variables: { L: 'NULL' },
+        result: '()'
+      });
+      return steps;
+    }
+
+    const first = graph.nodes[headId];
+    const nextId = first.next || null;
+    const pointer = nextId ? headId + '.next' : null;
+    const remaining = chainIds(graph, nextId);
+
+    push({
+      desc: nextId
+        ? '返回 L->next：从 ' + nextId + ' 开始的那条链。'
+        : 'L->next 为 NULL，表尾是空表。',
+      line: 'ret',
+      highlightNodeIds: remaining,
+      highlightPointers: pointer ? [pointer] : [],
+      variables: { L: headId, next: nextId || 'NULL' },
+      result: serializeChain(graph, nextId),
+      returnedNodeId: nextId || undefined
+    });
+
+    return steps;
+  }
+
+  function generateLengthSteps(graph, subject, codeBlock) {
+    const steps = [];
+    const counted = Object.create(null);
+    const push = (spec) => steps.push(makeStep(graph, {
+      ...spec,
+      nodeBadges: { ...counted, ...(spec.nodeBadges || {}) }
+    }, codeBlock.marks));
+
+    let id = subject.headId || null;
+    let len = 0;
+    const pointed = subject.sourcePointer || null;
+
+    push({
+      desc: '准备求长度：只统计当前 GList 的同级链。',
+      line: 'func',
+      highlightNodeIds: id ? [id] : [],
+      highlightPointers: pointed ? [pointed] : [],
+      variables: { L: id || 'NULL', len: 0 },
+      result: 'len = 0'
+    });
+
+    push({
+      desc: '初始化计数器 len = 0。',
+      line: 'init',
+      variables: { len: 0 },
+      result: 'len = 0'
+    });
+
+    push({
+      desc: id ? 'p 指向当前 GList 的第一个结点 ' + id + '。' : '当前是空表，p = NULL，长度为 0。',
+      line: 'pinit',
+      highlightNodeIds: id ? [id] : [],
+      highlightPointers: pointed ? [pointed] : [],
+      variables: { p: id || 'NULL', len: 0 },
+      result: 'p = ' + (id || 'NULL')
+    });
+
+    while (id) {
+      const node = graph.nodes[id];
+      push({
+        desc: 'p 指向 ' + id + '，p != NULL，进入循环。',
+        line: 'loop',
+        highlightNodeIds: [id],
+        variables: { p: id, len },
+        result: 'len = ' + len
+      });
+
+      len += 1;
+      counted[id] = '#' + len;
+      push({
+        desc: '当前结点计入长度，len 加 1。',
+        line: 'count',
+        highlightNodeIds: [id],
+        variables: { p: id, len },
+        result: 'len = ' + len
+      });
+
+      const nextId = node.next || null;
+      push({
+        desc: nextId ? 'p = p->next，移动到 ' + nextId + '。' : 'p->next 为 NULL，循环结束。',
+        line: nextId ? 'next' : 'loop',
+        highlightNodeIds: nextId ? [nextId] : [id],
+        highlightPointers: nextId ? [id + '.next'] : [],
+        variables: { p: nextId || 'NULL', len },
+        result: nextId ? 'p = ' + nextId : 'p = NULL'
+      });
+
+      id = nextId;
+    }
+
+    push({
+      desc: '返回累计长度 ' + len + '。',
+      line: 'ret',
+      highlightNodeIds: [],
+      variables: { len },
+      result: '长度 = ' + len
+    });
+
+    return steps;
+  }
+
+  function generateDepthSteps(graph, subject, codeBlock) {
+    const steps = [];
+    const depths = Object.create(null);
+    const rootNode = graph.nodes[graph.rootId];
+    const subjectIsRootChain = !!(rootNode && subject.headId === rootNode.child);
+    const push = (spec) => steps.push(makeStep(graph, {
+      ...spec,
+      nodeBadges: { ...depths, ...(spec.nodeBadges || {}) }
+    }, codeBlock.marks));
+
+    push({
+      desc: '准备求深度。层数口径：空链 1 层，element 计 1 层，sublist 递归。',
+      line: 'func',
+      highlightNodeIds: subject.headId ? [subject.headId] : [],
+      highlightPointers: subject.sourcePointer ? [subject.sourcePointer] : [],
+      variables: { L: subject.headId || 'NULL' },
+      result: '当前对象 ' + subject.exprLabel
+    });
+
+    function depthChain(headId, stack) {
+      const stackText = stack.join(' > ');
+
+      if (!headId) {
         push({
-          desc: '遇到空指针，按空表口径返回 1。',
-          line: 'depth.null',
-          variables: { current: 'NULL', stack: stackText },
+          desc: '空链按 1 层计。',
+          line: 'null',
+          variables: { L: 'NULL', stack: stackText },
           result: '返回 1'
         });
         return 1;
       }
 
       push({
-        desc: `进入节点 ${nodeId}，先检查空指针。`,
-        line: 'depth.null',
-        highlightNodeIds: [nodeId],
-        variables: { current: nodeId, stack: stackText },
-        result: '非空，继续判断类型'
+        desc: '进入 GList 链，初始化 max = 0。',
+        line: 'init',
+        highlightNodeIds: [headId],
+        variables: { L: headId, stack: stackText },
+        result: 'max = 0'
       });
 
-      if (node.tag === ATOM) {
-        depths[nodeId] = 'd1';
-        push({
-          desc: `节点 ${nodeId} 是原子，按 1 层计。`,
-          line: 'depth.atom',
-          highlightNodeIds: [nodeId],
-          variables: {
-            current: nodeId,
-            atom: node.value,
-            depth: 1,
-            stack: stackText
-          },
-          result: `${nodeId} 返回 1`
-        });
-        return 1;
-      }
-
-      if (!node.child) {
-        depths[nodeId] = 'd1';
-        push({
-          desc: `节点 ${nodeId} 是空表，深度为 1。`,
-          line: 'depth.empty',
-          highlightNodeIds: [nodeId],
-          variables: { current: nodeId, depth: 1, stack: stackText },
-          result: `${nodeId} 返回 1`
-        });
-        return 1;
-      }
-
-      push({
-        desc: `节点 ${nodeId} 是表，初始化 maxDepth = 0，准备遍历子项。`,
-        line: 'depth.initMax',
-        highlightNodeIds: [nodeId],
-        variables: {
-          current: nodeId,
-          maxDepth: 0,
-          stack: stackText
-        },
-        result: 'maxDepth = 0'
-      });
-
-      let maxDepth = 0;
-      let childId = node.child;
+      let max = 0;
+      let id = headId;
       let previousId = null;
-      let index = 0;
 
-      while (childId) {
-        const pointerKey = previousId ? `${previousId}.next` : `${nodeId}.child`;
-
-        push({
-          desc: `检查第 ${index + 1} 个子项 ${childId}，准备递归求深度。`,
-          line: 'depth.loop',
-          highlightNodeIds: [childId],
-          highlightPointers: [pointerKey],
-          variables: {
-            current: nodeId,
-            child: childId,
-            index: index + 1,
-            maxDepth,
-            stack: stackText
-          },
-          result: `正在处理子项 ${index + 1}`
-        });
+      while (id) {
+        const node = graph.nodes[id];
+        const pointer = previousId ? previousId + '.next' : (stack.length === 0 ? subject.sourcePointer : null);
 
         push({
-          desc: `递归调用 GListDepth(${childId})。`,
-          line: 'depth.call',
-          highlightNodeIds: [childId],
-          highlightPointers: [pointerKey],
-          variables: {
-            current: nodeId,
-            child: childId,
-            index: index + 1,
-            stack: stackText
-          },
-          result: `进入 ${childId}`
+          desc: '检查结点 ' + id + '（' + (node.tag === ATOM ? 'element' : 'sublist') + '）。',
+          line: 'loop',
+          highlightNodeIds: [id],
+          highlightPointers: pointer ? [pointer] : [],
+          variables: { p: id, tag: node.tag === ATOM ? 'element' : 'sublist', max, stack: stackText },
+          result: '当前 max = ' + max
         });
 
-        const childDepth = visit(childId, nextStack);
-
-        push({
-          desc: `比较子项 ${childId} 的深度 ${childDepth} 与当前 maxDepth ${maxDepth}。`,
-          line: 'depth.compare',
-          highlightNodeIds: [nodeId, childId],
-          highlightPointers: [pointerKey],
-          variables: {
-            current: nodeId,
-            child: childId,
-            childDepth,
-            maxDepth,
-            stack: stackText
-          },
-          result: childDepth > maxDepth
-            ? `${childDepth} > ${maxDepth}，需要更新`
-            : `${childDepth} ≤ ${maxDepth}，保持不变`
-        });
-
-        if (childDepth > maxDepth) {
-          maxDepth = childDepth;
+        let d;
+        if (node.tag === ATOM) {
+          d = 1;
+          depths[id] = 'd1';
           push({
-            desc: `更新 maxDepth 为 ${maxDepth}。`,
-            line: 'depth.update',
-            highlightNodeIds: [nodeId, childId],
-            variables: {
-              current: nodeId,
-              maxDepth,
-              childDepth,
-              stack: stackText
-            },
-            result: `maxDepth = ${maxDepth}`
+            desc: '当前结点是 element，深度计 1。',
+            line: 'setAtom',
+            highlightNodeIds: [id],
+            variables: { p: id, d: 1, max, stack: stackText },
+            result: 'd = 1'
+          });
+        } else {
+          push({
+            desc: '当前结点是 sublist，递归求 u.sub_list 的深度。',
+            line: 'recurse',
+            highlightNodeIds: [id],
+            highlightPointers: node.child ? [id + '.child'] : [],
+            variables: { p: id, max, stack: stackText },
+            result: '进入子表'
+          });
+          d = depthChain(node.child, stack.concat(id));
+          depths[id] = 'd' + d;
+          push({
+            desc: '子表 ' + id + ' 返回深度 ' + d + '。',
+            line: 'recurse',
+            highlightNodeIds: [id],
+            variables: { p: id, d, max, stack: stackText },
+            result: 'd = ' + d
           });
         }
 
-        previousId = childId;
-        childId = graph.nodes[childId].next;
-        index += 1;
-      }
-
-      const depth = maxDepth + 1;
-      depths[nodeId] = `d${depth}`;
-      push({
-        desc: `节点 ${nodeId} 的子项处理完毕，返回 maxDepth + 1 = ${depth}。`,
-        line: 'depth.return',
-        highlightNodeIds: [nodeId],
-        variables: {
-          current: nodeId,
-          maxDepth,
-          depth,
-          stack: stackText
-        },
-        result: `${nodeId} 返回 ${depth}`
-      });
-      return depth;
-    }
-
-    const depth = visit(rootId, []);
-
-    push({
-      desc: '根节点深度计算完成。',
-      line: 'depth.return',
-      highlightNodeIds: [rootId],
-      variables: { root: rootId, current: rootId, depth, rule: '1 + max(子项)' },
-      result: `深度 = ${depth}`
-    });
-
-    return steps;
-  }
-
-  function generateHeadSteps(graph, codeBlock) {
-    const steps = [];
-    const push = (spec) => steps.push(makeStep(graph, spec, codeBlock.marks));
-    const rootId = graph.rootId;
-    const root = graph.nodes[rootId];
-
-    push({
-      desc: '准备取表头，先检查根表是否为空。',
-      line: 'head.func',
-      highlightNodeIds: [rootId],
-      variables: { root: rootId },
-      result: '等待检查'
-    });
-
-    push({
-      desc: root.child ? '根表非空，可以读取 child 指针。' : '根表没有 child，空表没有表头。',
-      line: 'head.empty',
-      highlightNodeIds: [rootId],
-      variables: { root: rootId, empty: !root.child },
-      result: root.child ? '非空' : '空表'
-    });
-
-    if (!root.child) {
-      push({
-        desc: '空表没有表头，操作结束并返回 NULL。',
-        line: 'head.empty',
-        highlightNodeIds: [rootId],
-        variables: { root: rootId, head: 'NULL' },
-        result: '空表没有表头'
-      });
-      return steps;
-    }
-
-    const headId = root.child;
-    const headText = serializeNodeValue(graph, headId);
-
-    push({
-      desc: `沿 ${rootId}.child 指针找到表头节点 ${headId}。`,
-      line: 'head.return',
-      highlightNodeIds: [headId],
-      highlightPointers: [`${rootId}.child`],
-      variables: {
-        root: rootId,
-        head: headId,
-        value: headText
-      },
-      result: headText,
-      returnedNodeId: headId
-    });
-
-    push({
-      desc: `返回表头节点 ${headId}，它表示的值是 ${headText}。`,
-      line: 'head.return',
-      highlightNodeIds: [headId],
-      highlightPointers: [`${rootId}.child`],
-      variables: {
-        root: rootId,
-        head: headId,
-        existingNode: true
-      },
-      result: headText,
-      returnedNodeId: headId
-    });
-
-    return steps;
-  }
-
-  function generateTailSteps(graph, codeBlock) {
-    const steps = [];
-    const push = (spec) => steps.push(makeStep(graph, spec, codeBlock.marks));
-    const rootId = graph.rootId;
-    const root = graph.nodes[rootId];
-
-    push({
-      desc: '准备取表尾，先检查根表是否为空。',
-      line: 'tail.func',
-      highlightNodeIds: [rootId],
-      variables: { root: rootId },
-      result: '等待检查'
-    });
-
-    push({
-      desc: root.child ? '根表非空，首元素之后的元素组成表尾。' : '根表没有 child，空表没有表尾。',
-      line: 'tail.empty',
-      highlightNodeIds: [rootId],
-      variables: { root: rootId, empty: !root.child },
-      result: root.child ? '非空' : '空表'
-    });
-
-    if (!root.child) {
-      push({
-        desc: '空表没有表尾，操作结束并返回 NULL。',
-        line: 'tail.empty',
-        highlightNodeIds: [rootId],
-        variables: { root: rootId, tail: 'NULL' },
-        result: '空表没有表尾'
-      });
-      return steps;
-    }
-
-    const firstId = root.child;
-    const first = graph.nodes[firstId];
-
-    push({
-      desc: `定位首元素 ${firstId}，它的 next 指向表尾剩余元素。`,
-      line: 'tail.first',
-      highlightNodeIds: [firstId],
-      highlightPointers: [`${rootId}.child`],
-      variables: { root: rootId, first: firstId },
-      result: `first = ${firstId}`
-    });
-
-    const tail = createGraphNode(graph, LIST, { prefix: 'T', synthetic: true });
-    push({
-      desc: `创建新的返回表头节点 ${tail.id}（tag 尚未设置）。`,
-      line: 'tail.new',
-      highlightNodeIds: [tail.id],
-      variables: { root: rootId, first: firstId, tail: tail.id, tag: '未设置' },
-      result: `已分配表头 ${tail.id}`
-    });
-
-    tail.tag = LIST;
-    push({
-      desc: `设置返回表头 ${tail.id} 的 tag = LIST。`,
-      line: 'new',
-      highlightNodeIds: [tail.id],
-      variables: { root: rootId, tail: tail.id, tag: 'LIST' },
-      result: `${tail.id} 是表节点`
-    });
-
-    tail.child = first.next;
-    const remaining = first.next;
-    const pointerHighlights = [];
-    if (remaining) pointerHighlights.push(`${firstId}.next`);
-    pointerHighlights.push(`${tail.id}.child`);
-
-    push({
-      desc: remaining
-        ? `令 ${tail.id}.child = ${firstId}.next，表尾从 ${remaining} 开始。`
-        : `${firstId}.next 为 NULL，表尾是空表 ()。`,
-      line: 'tail.link',
-      highlightNodeIds: [tail.id].concat(remaining ? [remaining] : []),
-      highlightPointers: pointerHighlights,
-      variables: {
-        root: rootId,
-        first: firstId,
-        tail: tail.id,
-        child: remaining || 'NULL'
-      },
-      result: remaining ? `${tail.id}.child → ${remaining}` : `${tail.id}.child = NULL`
-    });
-
-    const tailText = serializeNodeValue(graph, tail.id);
-    push({
-      desc: `返回新表头 ${tail.id}，表尾值为 ${tailText}。`,
-      line: 'tail.return',
-      highlightNodeIds: [tail.id],
-      highlightPointers: remaining ? [`${firstId}.next`] : [],
-      variables: {
-        root: rootId,
-        tail: tail.id,
-        child: remaining || 'NULL',
-        value: tailText
-      },
-      result: tailText,
-      returnedNodeId: tail.id
-    });
-
-    return steps;
-  }
-
-  function generateTraverseSteps(graph, codeBlock) {
-    const steps = [];
-    const push = (spec) => steps.push(makeStep(graph, spec, codeBlock.marks));
-    const visited = [];
-    const sequence = [];
-    const rootId = graph.rootId;
-
-    push({
-      desc: '准备先序遍历：表节点作为路径，原子节点按访问顺序输出。',
-      line: 'traverse.func',
-      highlightNodeIds: [rootId],
-      variables: { current: rootId, sequence: '（空）', count: 0 },
-      result: '访问序列尚未开始',
-      visitedIds: []
-    });
-
-    function walk(nodeId, stack) {
-      const node = graph.nodes[nodeId];
-      if (!node) return;
-
-      const stackText = stack.concat(nodeId).join(' > ');
-
-      if (node.tag === ATOM) {
         push({
-          desc: `到达节点 ${nodeId}，判断为原子。`,
-          line: 'traverse.atom',
-          highlightNodeIds: [nodeId],
-          variables: {
-            current: nodeId,
-            atom: node.value,
-            stack: stackText,
-            sequence: sequence.length ? sequence.join(' → ') : '（空）'
-          },
-          result: sequence.length ? sequence.join(', ') : '尚未访问原子',
-          visitedIds: visited
+          desc: '比较 d = ' + d + ' 与 max = ' + max + '。',
+          line: 'compare',
+          highlightNodeIds: [id],
+          variables: { p: id, d, max, stack: stackText },
+          result: d > max ? d + ' > ' + max : d + ' ≤ ' + max
         });
 
-        visited.push(nodeId);
-        sequence.push(node.value);
-        push({
-          desc: `访问原子 ${node.value}，追加到访问序列。`,
-          line: 'traverse.print',
-          highlightNodeIds: [nodeId],
-          variables: {
-            current: nodeId,
-            atom: node.value,
-            count: sequence.length,
-            sequence: sequence.join(' → ')
-          },
-          result: sequence.join(', '),
-          visitedIds: visited
-        });
-        return;
+        if (d > max) {
+          max = d;
+          push({
+            desc: '更新 max = ' + max + '。',
+            line: 'update',
+            highlightNodeIds: [id],
+            variables: { p: id, d, max, stack: stackText },
+            result: 'max = ' + max
+          });
+        }
+
+        previousId = id;
+        id = node.next || null;
       }
 
-      push({
-        desc: `进入表节点 ${nodeId}，沿 child 链继续遍历。`,
-        line: 'traverse.loop',
-        highlightNodeIds: [nodeId],
-        variables: {
-          current: nodeId,
-          stack: stackText,
-          sequence: sequence.length ? sequence.join(' → ') : '（空）'
-        },
-        result: sequence.length ? sequence.join(', ') : '进入子表',
-        visitedIds: visited
-      });
-
-      let childId = node.child;
-      let previousId = null;
-      let index = 0;
-
-      while (childId) {
-        const pointerKey = previousId ? `${previousId}.next` : `${nodeId}.child`;
-        push({
-          desc: `沿 ${pointerKey} 准备访问下一个节点 ${childId}。`,
-          line: 'traverse.call',
-          highlightNodeIds: [childId],
-          highlightPointers: [pointerKey],
-          variables: {
-            current: nodeId,
-            child: childId,
-            index: index + 1,
-            sequence: sequence.length ? sequence.join(' → ') : '（空）'
-          },
-          result: sequence.length ? sequence.join(', ') : `准备访问 ${childId}`,
-          visitedIds: visited
-        });
-
-        walk(childId, stack.concat(nodeId));
-        previousId = childId;
-        childId = graph.nodes[childId].next;
-        index += 1;
+      const result = max + 1;
+      depths[headId] = depths[headId] || 'd' + result;
+      if (stack.length === 0 && subjectIsRootChain) {
+        depths[graph.rootId] = 'd' + result;
       }
-
       push({
-        desc: `表节点 ${nodeId} 的 child 链遍历完毕，返回上层。`,
-        line: 'traverse.loop',
-        highlightNodeIds: [nodeId],
-        variables: {
-          current: nodeId,
-          count: sequence.length,
-          sequence: sequence.length ? sequence.join(' → ') : '（空）'
-        },
-        result: sequence.length ? sequence.join(', ') : '空序列',
-        visitedIds: visited
+        desc: '当前链处理完毕，返回 max + 1 = ' + result + '。',
+        line: 'ret',
+        highlightNodeIds: [headId].concat(subjectIsRootChain && stack.length === 0 ? [graph.rootId] : []),
+        variables: { max, depth: result, stack: stackText },
+        result: '返回 ' + result
       });
+      return result;
     }
 
-    walk(rootId, []);
-
-    const finalSequence = sequence.join(', ');
+    const depth = depthChain(subject.headId || null, []);
     push({
-      desc: '先序遍历完成，输出所有原子。',
-      line: 'traverse.func',
-      highlightNodeIds: [],
+      desc: '函数调用结束，' + subject.exprLabel + ' 的深度为 ' + depth + '。',
+      line: 'ret',
+      highlightNodeIds: subjectIsRootChain ? [graph.rootId] : [],
       variables: {
-        count: sequence.length,
-        sequence: sequence.length ? sequence.join(' → ') : '（空）'
+        current: subjectIsRootChain ? graph.rootId : (subject.headId || null),
+        depth,
+        当前对象: subject.exprLabel
       },
-      result: sequence.length ? finalSequence : '（空表，没有原子）',
-      visitedIds: visited
+      result: '深度 = ' + depth
     });
 
     return steps;
@@ -1446,7 +1431,7 @@
 
     function kindOf(node) {
       if (node.tag) return node.tag;
-      return node.id.charAt(0) === 'A' ? ATOM : LIST;
+      return node.id.charAt(0) === 'E' ? ATOM : LIST;
     }
 
     function ownWidth(node) {
@@ -1474,7 +1459,7 @@
         return 0;
       }
       let width = ownWidth(node);
-      if (node.tag === LIST && node.child) {
+      if ((node.tag === LIST || node.tag === ROOT) && node.child) {
         width = Math.max(width, chainWidth(node.child));
       }
       measureCache[id] = width;
@@ -1493,7 +1478,7 @@
         h: NODE_HEIGHT
       };
 
-      if (node.tag === LIST && node.child) {
+      if ((node.tag === LIST || node.tag === ROOT) && node.child) {
         const childrenWidth = chainWidth(node.child);
         let childLeft = centerX - childrenWidth / 2;
         let childId = node.child;
@@ -1570,48 +1555,1330 @@
       const required = ['desc', 'codeLine', 'nodes', 'highlightNodeIds', 'highlightPointers', 'variables', 'result'];
       required.forEach((key) => {
         if (!(key in step)) {
-          throw new Error(`内部错误：第 ${index + 1} 步缺少字段 ${key}`);
+          throw new Error('内部错误：第 ' + (index + 1) + ' 步缺少字段 ' + key);
         }
       });
       if (!Number.isInteger(step.codeLine) || step.codeLine < 1 || step.codeLine > codeBlock.lines.length) {
-        throw new Error(`内部错误：第 ${index + 1} 步的 codeLine 越界。`);
+        throw new Error('内部错误：第 ' + (index + 1) + ' 步的 codeLine 越界。');
       }
       if (!Array.isArray(step.nodes) || !Array.isArray(step.highlightNodeIds) ||
           !Array.isArray(step.highlightPointers)) {
-        throw new Error(`内部错误：第 ${index + 1} 步的数组字段格式不正确。`);
+        throw new Error('内部错误：第 ' + (index + 1) + ' 步的数组字段格式不正确。');
       }
     });
   }
 
-  function generateRun(expression, operation) {
+  function createBaseSubject(graph, name) {
+    const root = graph.nodes[graph.rootId];
+    const headId = root.child || null;
+    return makeListSubject(
+      graph,
+      headId,
+      name,
+      headId ? root.id + '.child' : null
+    );
+  }
+
+  function createBaseStep(graph, subject, name) {
+    return {
+      base: true,
+      desc: '当前对象 ' + subject.exprLabel + ' = ' + subject.valueText + '。从上方函数链选择操作开始演示。',
+      codeLine: null,
+      nodes: snapshotNodes(graph),
+      highlightNodeIds: [],
+      highlightPointers: [],
+      variables: { case: subject.exprLabel, head: subject.headId || 'NULL', length: chainLength(graph, subject.headId) },
+      result: subject.valueText
+    };
+  }
+
+  function createBaseView(graph, subject, name) {
+    return {
+      base: true,
+      graph,
+      layout: buildLayout(graph),
+      steps: [createBaseStep(graph, subject, name)],
+      codeBlock: null,
+      operation: null,
+      total: 1,
+      subject
+    };
+  }
+
+  function createOperationRun(graph, operation, subject) {
     const meta = OPERATION_BY_KEY[operation];
-    if (!meta) throw new Error(`未知操作：${operation}`);
+    if (!meta) throw new Error('未知操作：' + operation);
+    if (!subject || subject.kind !== 'list') {
+      throw new Error('当前对象不是广义表。');
+    }
 
+    const outcome = evaluateOperation(graph, subject, operation);
+    const steps = generateOperationSteps(operation, graph, subject);
     const codeBlock = CODE_BLOCKS[operation];
-    const parsed = parseExpression(expression, { trace: operation === 'create' });
-    const graph = parsed.graph;
-    let steps;
-
-    if (operation === 'create') {
-      steps = parsed.steps;
-    } else {
-      steps = generateOperationSteps(operation, graph);
-    }
-
-    if (!steps.length) {
-      throw new Error('没有生成任何步骤。');
-    }
-
     validateSteps(steps, codeBlock);
+    const layout = buildLayout(graph, { operation });
 
     return {
-      expression: String(expression),
-      operation,
-      codeBlock,
-      graph,
-      steps,
-      layout: buildLayout(graph, { operation }),
-      total: steps.length
+      run: {
+        base: false,
+        graph,
+        operation,
+        codeBlock,
+        layout,
+        steps,
+        total: steps.length,
+        subject
+      },
+      outcome
+    };
+  }
+
+  /* ===========================================================
+     头尾链表：图模型、布局与序列化
+     =========================================================== */
+
+  function buildHTGraph(linearGraph) {
+    const linearRoot = linearGraph.nodes[linearGraph.rootId];
+    const ht = {
+      nodes: Object.create(null),
+      rootId: 'R1',
+      seq: 0,
+      atomByLinearId: Object.create(null),
+      name: linearRoot ? linearRoot.name : '表'
+    };
+
+    const root = {
+      id: 'R1',
+      tag: ROOT,
+      root: true,
+      name: ht.name,
+      hp: null,
+      tp: null
+    };
+    ht.nodes[root.id] = root;
+
+    function createAtom(linearNode) {
+      const id = 'a' + (++ht.seq);
+      const atom = {
+        id,
+        tag: ATOM,
+        root: false,
+        value: linearNode.value,
+        data: linearNode.data,
+        hp: null,
+        tp: null,
+        sourceLinearId: linearNode.id
+      };
+      ht.nodes[id] = atom;
+      ht.atomByLinearId[linearNode.id] = id;
+      return atom;
+    }
+
+    function buildChain(linearHeadId) {
+      let firstId = null;
+      let previousId = null;
+      let linearId = linearHeadId;
+
+      while (linearId && linearGraph.nodes[linearId]) {
+        const linearNode = linearGraph.nodes[linearId];
+        let hp = null;
+        if (linearNode.tag === ATOM) {
+          hp = createAtom(linearNode).id;
+        } else {
+          hp = buildChain(linearNode.child || null);
+        }
+
+        const listNode = {
+          id: linearNode.id,
+          tag: LIST,
+          root: false,
+          hp,
+          tp: null,
+          sourceLinearId: linearNode.id
+        };
+        ht.nodes[listNode.id] = listNode;
+
+        if (previousId) {
+          ht.nodes[previousId].tp = listNode.id;
+        } else {
+          firstId = listNode.id;
+        }
+        previousId = listNode.id;
+        linearId = linearNode.next || null;
+      }
+
+      return firstId;
+    }
+
+    root.hp = buildChain(linearRoot ? linearRoot.child : null);
+    return ht;
+  }
+
+  function serializeHTList(ht, startId) {
+    if (!startId) return '()';
+    const parts = [];
+    let listId = startId;
+    while (listId && ht.nodes[listId]) {
+      const listNode = ht.nodes[listId];
+      if (!listNode.hp) {
+        parts.push('()');
+      } else {
+        const headNode = ht.nodes[listNode.hp];
+        if (!headNode) {
+          parts.push('');
+        } else if (headNode.tag === ATOM) {
+          parts.push(headNode.value == null ? '' : headNode.value);
+        } else {
+          parts.push(serializeHTList(ht, listNode.hp));
+        }
+      }
+      listId = listNode.tp || null;
+    }
+    return `(${parts.join(',')})`;
+  }
+
+  function serializeHTGraph(ht) {
+    return serializeHTList(ht, ht.nodes[ht.rootId] ? ht.nodes[ht.rootId].hp : null);
+  }
+
+  const HT_LIST_W = 96;
+  const HT_LIST_H = 52;
+  const HT_ATOM_SIZE = 48;
+  const HT_ROOT_W = 68;
+  const HT_ROOT_H = 42;
+  const HT_H_GAP = 18;
+  const HT_V_GAP = 28;
+  const HT_STAGE_PAD = 40;
+
+  function buildHTLayout(ht) {
+    const nodes = ht.nodes;
+    const root = nodes[ht.rootId];
+    const positions = Object.create(null);
+
+    const measureCache = Object.create(null);
+
+    function measurePtr(ptr) {
+      if (!ptr || !nodes[ptr]) return { w: 0, h: 0 };
+      const node = nodes[ptr];
+      if (node.tag === ATOM) return { w: HT_ATOM_SIZE, h: HT_ATOM_SIZE };
+      return measureList(ptr);
+    }
+
+    function measureList(startId) {
+      if (!startId) return { w: 0, h: 0 };
+      if (measureCache[startId]) return measureCache[startId];
+      let width = 0;
+      let height = 0;
+      let count = 0;
+      let listId = startId;
+      while (listId && nodes[listId]) {
+        const node = nodes[listId];
+        const hp = measurePtr(node.hp);
+        const cellW = Math.max(HT_LIST_W, hp.w + 20);
+        const cellH = HT_LIST_H + (hp.h ? HT_V_GAP + hp.h : 0);
+        width += cellW + (count ? HT_H_GAP : 0);
+        height = Math.max(height, cellH);
+        count += 1;
+        listId = node.tp || null;
+      }
+      const result = { w: width, h: height };
+      measureCache[startId] = result;
+      return result;
+    }
+
+    function placeList(startId, left, y) {
+      let listId = startId;
+      while (listId && nodes[listId]) {
+        const node = nodes[listId];
+        const hp = measurePtr(node.hp);
+        const cellW = Math.max(HT_LIST_W, hp.w + 20);
+        const centerX = left + cellW / 2;
+        positions[listId] = {
+          x: centerX,
+          y,
+          w: HT_LIST_W,
+          h: HT_LIST_H
+        };
+
+        if (node.hp && nodes[node.hp]) {
+          const headNode = nodes[node.hp];
+          if (headNode.tag === ATOM) {
+            positions[node.hp] = {
+              x: centerX,
+              y: y + HT_LIST_H / 2 + HT_V_GAP + HT_ATOM_SIZE / 2,
+              w: HT_ATOM_SIZE,
+              h: HT_ATOM_SIZE
+            };
+          } else {
+            placeList(
+              node.hp,
+              centerX - hp.w / 2,
+              y + HT_LIST_H / 2 + HT_V_GAP + HT_LIST_H / 2
+            );
+          }
+        }
+
+        left += cellW + HT_H_GAP;
+        listId = node.tp || null;
+      }
+    }
+
+    if (root && root.hp && nodes[root.hp]) {
+      placeList(root.hp, 0, 0);
+      const first = nodes[root.hp];
+      const firstPos = positions[first.id];
+      positions[root.id] = {
+        x: firstPos ? firstPos.x : 0,
+        y: firstPos ? firstPos.y - (HT_LIST_H / 2 + HT_V_GAP + HT_ROOT_H / 2) : 0,
+        w: HT_ROOT_W,
+        h: HT_ROOT_H
+      };
+    } else {
+      positions[root.id] = { x: 0, y: 0, w: HT_ROOT_W, h: HT_ROOT_H };
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    Object.keys(positions).forEach((id) => {
+      const pos = positions[id];
+      minX = Math.min(minX, pos.x - pos.w / 2);
+      maxX = Math.max(maxX, pos.x + pos.w / 2);
+      minY = Math.min(minY, pos.y - pos.h / 2);
+      maxY = Math.max(maxY, pos.y + pos.h / 2);
+    });
+
+    const shiftX = HT_STAGE_PAD - minX;
+    const shiftY = HT_STAGE_PAD - minY;
+    Object.keys(positions).forEach((id) => {
+      positions[id].x += shiftX;
+      positions[id].y += shiftY;
+    });
+
+    return {
+      positions,
+      width: Math.max(320, maxX - minX + HT_STAGE_PAD * 2),
+      height: Math.max(220, maxY - minY + HT_STAGE_PAD * 2)
+    };
+  }
+
+  function snapshotHTNodes(ht, visibleIds) {
+    return Object.keys(ht.nodes)
+      .filter((id) => !visibleIds || visibleIds.has(id))
+      .map((id) => {
+        const node = ht.nodes[id];
+        return {
+          id: node.id,
+          tag: node.tag,
+          root: !!node.root,
+          name: node.name || '',
+          value: node.value,
+          data: node.data,
+          hp: node.hp,
+          tp: node.tp
+        };
+      });
+  }
+
+  /* ===========================================================
+     创建与判等：纯逻辑与步骤快照
+     =========================================================== */
+
+  function generateBuildSteps(graph) {
+    const block = CODE_BLOCKS.build;
+    const root = graph.nodes[graph.rootId];
+    const steps = [];
+    const visible = new Set([graph.rootId]);
+    const total = Object.keys(graph.nodes).length - 1;
+
+    const push = (spec) => {
+      steps.push(makeStep(graph, { ...spec, visibleIds: visible }, block.marks));
+    };
+
+    function buildChain(headId, ownerId, stack, level) {
+      const ids = chainIds(graph, headId);
+      const n = ids.length;
+      const label = level === 0 ? (root.name || '表') : ownerId;
+
+      push({
+        desc: `调用 BuildList(${n})，开始构建 ${label} 这一层。`,
+        line: 'func',
+        highlightNodeIds: ownerId ? [ownerId] : [],
+        variables: { n, 层: level + 1, 栈: stack, 已建: visible.size - 1 },
+        result: `BuildList(${n})`
+      });
+      push({
+        desc: '分配临时头结点 dummy，tail 指向它。',
+        line: 'init',
+        variables: { tail: 'dummy', n, 栈: stack },
+        result: 'dummy 就绪'
+      });
+      push({
+        desc: 'dummy->next = NULL，准备从空链开始尾插。',
+        line: 'dummy',
+        variables: { tail: 'dummy', n },
+        result: '空链'
+      });
+
+      let previousId = null;
+
+      ids.forEach((id, index) => {
+        const node = graph.nodes[id];
+        const childCount = node.tag === ATOM ? 0 : chainLength(graph, node.child);
+        const k = node.tag === ATOM ? 0 : (childCount > 0 ? childCount : -1);
+
+        push({
+          desc: `循环第 ${index + 1} 个结点：读入 k = ${k}。`,
+          line: 'loop',
+          variables: { n, i: index + 1, k, 栈: stack },
+          result: `k = ${k}`
+        });
+
+        visible.add(id);
+        push({
+          desc: `分配新结点 p = ${id}，准备写入 tag。`,
+          line: 'alloc',
+          highlightNodeIds: [id],
+          variables: { p: id, k, 已建: visible.size - 1 },
+          result: `p = ${id}`
+        });
+        push({
+          desc: `读入 k = ${k}：${k === 0 ? '这是原子结点' : (k > 0 ? '这是含 ' + k + ' 个结点的子表' : '这是空子表')}。`,
+          line: 'read',
+          highlightNodeIds: [id],
+          variables: { p: id, k, tag: node.tag },
+          result: `k = ${k}`
+        });
+        push({
+          desc: k === 0 ? 'k = 0，设置 p->tag = element。' : 'k ≠ 0，设置 p->tag = sublist。',
+          line: 'tag',
+          highlightNodeIds: [id],
+          variables: { p: id, tag: node.tag },
+          result: node.tag === ATOM ? 'element' : 'sublist'
+        });
+
+        if (node.tag === ATOM) {
+          push({
+            desc: `读入 p->u.data = ${node.value}。`,
+            line: 'data',
+            highlightNodeIds: [id],
+            variables: { p: id, data: node.value },
+            result: `data = ${node.value}`
+          });
+        } else {
+          push({
+            desc: k > 0
+              ? `p 是子表，递归 BuildList(${k}) 构建 u.sub_list。`
+              : 'k = -1：空子表，递归 BuildList(0) 返回 NULL。',
+            line: 'recurse',
+            highlightNodeIds: [id],
+            variables: { p: id, k, 栈: stack },
+            result: '进入子表'
+          });
+          if (k > 0) {
+            buildChain(node.child, id, stack.concat(id), level + 1);
+          } else {
+            push({
+              desc: 'BuildList(0) 直接返回 NULL，p->u.sub_list 为空。',
+              line: 'recurse',
+              highlightNodeIds: [id],
+              variables: { p: id, k },
+              result: 'u.sub_list = NULL'
+            });
+          }
+          push({
+            desc: '子表返回，继续当前层。',
+            line: 'afterSub',
+            highlightNodeIds: [id],
+            variables: { p: id, 已建: visible.size - 1 },
+            result: '子表完成'
+          });
+        }
+
+        const pointerKey = previousId ? `${previousId}.next` : `${ownerId}.child`;
+        const tailValue = previousId || 'dummy';
+        push({
+          desc: `tail->next = p：把 ${id} 接到 ${tailValue} 的后面。`,
+          line: 'link',
+          highlightNodeIds: [id],
+          highlightPointers: [pointerKey],
+          variables: { p: id, tail: tailValue },
+          result: `${pointerKey} → ${id}`
+        });
+        push({
+          desc: 'p->next = NULL，tail 后移到新结点。',
+          line: 'next',
+          highlightNodeIds: [id],
+          variables: { p: id, tail: id },
+          result: `tail = ${id}`
+        });
+        push({
+          desc: '当前结点完成尾插，进入下一轮循环。',
+          line: 'tail',
+          highlightNodeIds: [id],
+          variables: { tail: id, 已建: visible.size - 1 },
+          result: `tail = ${id}`
+        });
+
+        previousId = id;
+      });
+
+      const firstId = ids[0] || 'NULL';
+      push({
+        desc: '循环结束：head = dummy->next，释放临时头结点。',
+        line: 'free',
+        variables: { head: firstId, n, 已建: visible.size - 1 },
+        result: `head = ${firstId}`
+      });
+      push({
+        desc: `BuildList(${n}) 返回 ${firstId}。`,
+        line: 'ret',
+        highlightNodeIds: firstId !== 'NULL' ? [firstId] : [],
+        variables: { return: firstId, n },
+        result: firstId
+      });
+    }
+
+    buildChain(root.child || null, root.id, [root.name || '表'], 0);
+
+    push({
+      desc: `创建完成：${serializeGraph(graph)}。`,
+      line: 'ret',
+      variables: { 结点: total, 已建: total, 结果: serializeGraph(graph) },
+      result: serializeGraph(graph)
+    });
+
+    return steps;
+  }
+
+  function createBuildRun(graph) {
+    const codeBlock = CODE_BLOCKS.build;
+    const steps = generateBuildSteps(graph);
+    validateSteps(steps, codeBlock);
+    return {
+      run: {
+        base: false,
+        graph,
+        operation: 'build',
+        build: true,
+        codeBlock,
+        layout: buildLayout(graph),
+        steps,
+        total: steps.length,
+        subject: null
+      }
+    };
+  }
+
+  function compareDescription(graph, id) {
+    if (!id) return 'NULL';
+    const node = graph.nodes[id];
+    if (!node) return id;
+    if (node.tag === ATOM) return `${id} · element ${node.value}`;
+    return `${id} · sublist`;
+  }
+
+  function generateCompareSteps(graphA, graphB, nameA, nameB) {
+    const block = CODE_BLOCKS.equal;
+    const steps = [];
+    const rootA = graphA.nodes[graphA.rootId];
+    const rootB = graphB.nodes[graphB.rootId];
+    let lastPair = { a: rootA.child, b: rootB.child };
+    let decisivePair = null;
+    let resultMark = 'retTrue';
+
+    const push = (line, desc, variables, result, pair, mismatch) => {
+      const codeLine = block.marks[line];
+      if (!codeLine) throw new Error('内部错误：未知判等代码行 ' + line);
+      steps.push({
+        desc,
+        codeLine,
+        mark: line,
+        nodes: [],
+        highlightNodeIds: [],
+        highlightPointers: [],
+        variables: cloneVariables(variables),
+        result: String(result),
+        compare: {
+          a: pair && pair.a ? pair.a : null,
+          b: pair && pair.b ? pair.b : null,
+          mismatch: !!mismatch
+        }
+      });
+    };
+
+    push('func',
+      `调用 IsEqual(${nameA}, ${nameB})。`,
+      { A: rootA.child || 'NULL', B: rootB.child || 'NULL' },
+      '继续',
+      { a: rootA.child, b: rootB.child });
+
+    function compareAt(aId, bId, level) {
+      const a = aId || null;
+      const b = bId || null;
+
+      push('empty',
+        a || b ? '检查两个指针是否同时为空。' : '两个指针同时为空。',
+        { A: a || 'NULL', B: b || 'NULL', 层: level },
+        (!a && !b) ? 'true' : '继续',
+        { a, b });
+
+      if (!a && !b) {
+        resultMark = 'retTrue';
+        push('retTrue',
+          '两边都为空，返回 true。',
+          { A: 'NULL', B: 'NULL', 层: level },
+          'true',
+          { a: null, b: null });
+        return true;
+      }
+
+      push('oneEmpty',
+        (!a || !b) ? '只有一侧为空。' : '两边都不为空，继续比较。',
+        { A: a || 'NULL', B: b || 'NULL', 层: level },
+        (!a || !b) ? 'false' : '继续',
+        { a, b },
+        !a || !b);
+
+      if (!a || !b) {
+        decisivePair = { a, b };
+        resultMark = 'retFalse';
+        push('retFalse',
+          '一侧先结束，返回 false。',
+          { A: a || 'NULL', B: b || 'NULL', 层: level },
+          'false',
+          { a, b },
+          true);
+        return false;
+      }
+
+      lastPair = { a, b };
+      const nodeA = graphA.nodes[a];
+      const nodeB = graphB.nodes[b];
+
+      push('tag',
+        `比较 tag：A = ${nodeA.tag}，B = ${nodeB.tag}。`,
+        { tagA: nodeA.tag, tagB: nodeB.tag, 层: level },
+        '继续',
+        { a, b });
+
+      if (nodeA.tag !== nodeB.tag) {
+        decisivePair = { a, b };
+        resultMark = 'failTag';
+        push('failTag',
+          'tag 不同，返回 false。',
+          { tagA: nodeA.tag, tagB: nodeB.tag, 层: level },
+          'false',
+          { a, b },
+          true);
+        return false;
+      }
+
+      if (nodeA.tag === ATOM) {
+        push('atom',
+          '两边都是 element，比较 data。',
+          { tag: 'element', 层: level },
+          '继续',
+          { a, b });
+        const dataA = nodeA.data == null ? nodeA.value : nodeA.data;
+        const dataB = nodeB.data == null ? nodeB.value : nodeB.data;
+        const sameData = dataA === dataB;
+        push('data',
+          `比较 data：A = ${nodeA.value}，B = ${nodeB.value}。`,
+          { dataA: nodeA.value, dataB: nodeB.value, 层: level },
+          sameData ? '继续' : 'false',
+          { a, b },
+          !sameData);
+        if (!sameData) {
+          decisivePair = { a, b };
+          resultMark = 'failData';
+          push('failData',
+            'data 不同，返回 false。',
+            { dataA: nodeA.value, dataB: nodeB.value, 层: level },
+            'false',
+            { a, b },
+            true);
+          return false;
+        }
+      } else {
+        push('recurse',
+          '两边都是 sublist，递归比较 u.sub_list。',
+          { A: a, B: b, 层: level + 1 },
+          '进入子表',
+          { a, b });
+        if (!compareAt(nodeA.child, nodeB.child, level + 1)) {
+          decisivePair = decisivePair || { a, b };
+          resultMark = 'failSub';
+          push('failSub',
+            '子表递归返回 false，当前这一对也不相等。',
+            { A: a, B: b, 层: level },
+            'false',
+            { a, b },
+            true);
+          return false;
+        }
+      }
+
+      const nextA = nodeA.next || null;
+      const nextB = nodeB.next || null;
+      push('next',
+        '沿 next 递归比较剩余链。',
+        { A: nextA || 'NULL', B: nextB || 'NULL', 层: level },
+        '继续',
+        { a: nextA, b: nextB });
+      return compareAt(nextA, nextB, level);
+    }
+
+    const result = compareAt(rootA.child, rootB.child, 0);
+    const finalPair = result ? lastPair : (decisivePair || lastPair);
+    push(resultMark,
+      result ? '判等结果：两个广义表相等。' : '判等结果：两个广义表不相等。',
+      { 结论: result ? 'true' : 'false' },
+      result ? 'true' : 'false',
+      finalPair,
+      !result);
+
+    return { equal: result, steps };
+  }
+
+  function createCompareRun(graphA, graphB, nameA, nameB) {
+    const block = CODE_BLOCKS.equal;
+    const generated = generateCompareSteps(graphA, graphB, nameA, nameB);
+    generated.steps.forEach((step) => {
+      if (!Number.isInteger(step.codeLine) || step.codeLine < 1 || step.codeLine > block.lines.length) {
+        throw new Error('内部错误：判等步骤的代码行越界。');
+      }
+    });
+    return {
+      run: {
+        base: false,
+        compare: true,
+        operation: 'equal',
+        codeBlock: block,
+        graphA,
+        graphB,
+        nameA,
+        nameB,
+        layoutA: buildLayout(graphA),
+        layoutB: buildLayout(graphB),
+        steps: generated.steps,
+        total: generated.steps.length,
+        equal: generated.equal,
+        subject: null
+      },
+      equal: generated.equal
+    };
+  }
+
+  /* ===========================================================
+     头尾链表：步骤快照、创建、操作与判等
+     =========================================================== */
+
+  const HT_OPERATION_BLOCKS = {
+    head: 'htHead',
+    tail: 'htTail',
+    length: 'htLength',
+    depth: 'htDepth'
+  };
+
+  function makeHTStep(ht, spec, marks, visibleIds) {
+    const codeLine = marks[spec.line];
+    if (!codeLine) throw new Error('内部错误：未知头尾链表代码行 ' + spec.line);
+    const step = {
+      desc: spec.desc,
+      codeLine,
+      storage: 'headtail',
+      nodes: [],
+      htNodes: snapshotHTNodes(ht, visibleIds),
+      htHighlightNodeIds: Array.from(new Set(spec.htHighlightNodeIds || [])),
+      htHighlightPointers: Array.from(new Set(spec.htHighlightPointers || [])),
+      variables: cloneVariables(spec.variables),
+      result: spec.result == null ? '—' : String(spec.result)
+    };
+    if (spec.htReturnedNodeId) step.htReturnedNodeId = spec.htReturnedNodeId;
+    if (spec.htBadges) step.htBadges = cloneVariables(spec.htBadges);
+    return step;
+  }
+
+  function createHTBaseStep(ht, subject) {
+    return {
+      base: true,
+      storage: 'headtail',
+      desc: '当前对象 ' + subject.exprLabel + ' = ' + subject.valueText + '。这是头尾链表表示。',
+      codeLine: null,
+      nodes: [],
+      htNodes: snapshotHTNodes(ht),
+      htHighlightNodeIds: [],
+      htHighlightPointers: [],
+      variables: {
+        案例: subject.exprLabel,
+        L: subject.headId || 'NULL',
+        长度: chainLengthByTP(ht, subject.headId)
+      },
+      result: subject.valueText
+    };
+  }
+
+  function createHTBaseView(linearGraph, ht, subject) {
+    return {
+      base: true,
+      storage: 'headtail',
+      graph: linearGraph,
+      htGraph: ht,
+      layout: buildHTLayout(ht),
+      steps: [createHTBaseStep(ht, subject)],
+      codeBlock: null,
+      operation: null,
+      total: 1,
+      subject
+    };
+  }
+
+  function chainLengthByTP(ht, startId) {
+    let count = 0;
+    let id = startId;
+    while (id && ht.nodes[id]) {
+      count += 1;
+      id = ht.nodes[id].tp || null;
+    }
+    return count;
+  }
+
+  function htNodeValue(ht, id) {
+    if (!id || !ht.nodes[id]) return '';
+    const node = ht.nodes[id];
+    if (node.tag === ATOM) return node.value == null ? '' : node.value;
+    return serializeHTList(ht, id);
+  }
+
+  function makeHTBaseVisible(ht) {
+    const set = new Set([ht.rootId]);
+    return set;
+  }
+
+  function generateHTHeadSteps(ht, subject, block) {
+    const steps = [];
+    const push = (spec) => steps.push(makeHTStep(ht, spec, block.marks));
+    const listId = subject.headId || null;
+    const listNode = listId ? ht.nodes[listId] : null;
+
+    push({
+      desc: '准备取头：当前表指针 L = ' + (listId || 'NULL') + '。',
+      line: 'func',
+      htHighlightNodeIds: listId ? [listId] : [],
+      variables: { L: listId || 'NULL' },
+      result: subject.valueText
+    });
+
+    if (!listNode) {
+      push({
+        desc: 'L 为 NULL，空表没有表头。',
+        line: 'empty',
+        variables: { L: 'NULL' },
+        result: '空表没有表头'
+      });
+      return steps;
+    }
+
+    if (!listNode.hp) {
+      push({
+        desc: 'L->u.ptr.hp 为 NULL，表头是一个空子表。',
+        line: 'ret',
+        htHighlightNodeIds: [listId],
+        htHighlightPointers: [listId + '.hp'],
+        variables: { L: listId, hp: 'NULL' },
+        result: '()'
+      });
+      return steps;
+    }
+
+    const headNode = ht.nodes[listNode.hp];
+    push({
+      desc: '返回 L->u.ptr.hp：' + (headNode.tag === ATOM ? '原子 ' + headNode.value : '子表 ' + serializeHTList(ht, listNode.hp)) + '。',
+      line: 'ret',
+      htHighlightNodeIds: [listId, listNode.hp],
+      htHighlightPointers: [listId + '.hp'],
+      variables: { L: listId, hp: listNode.hp, tag: headNode.tag },
+      result: htNodeValue(ht, listNode.hp)
+    });
+    return steps;
+  }
+
+  function generateHTTailSteps(ht, subject, block) {
+    const steps = [];
+    const push = (spec) => steps.push(makeHTStep(ht, spec, block.marks));
+    const listId = subject.headId || null;
+    const listNode = listId ? ht.nodes[listId] : null;
+
+    push({
+      desc: '准备取表尾：当前表指针 L = ' + (listId || 'NULL') + '。',
+      line: 'func',
+      htHighlightNodeIds: listId ? [listId] : [],
+      variables: { L: listId || 'NULL' },
+      result: subject.valueText
+    });
+
+    if (!listNode) {
+      push({
+        desc: 'L 为 NULL，表尾仍为空表。',
+        line: 'empty',
+        variables: { L: 'NULL' },
+        result: '()'
+      });
+      return steps;
+    }
+
+    const tailId = listNode.tp || null;
+    push({
+      desc: '返回 L->u.ptr.tp：表尾是 ' + serializeHTList(ht, tailId) + '。',
+      line: 'ret',
+      htHighlightNodeIds: tailId ? [listId, tailId] : [listId],
+      htHighlightPointers: [listId + '.tp'],
+      variables: { L: listId, tp: tailId || 'NULL' },
+      result: serializeHTList(ht, tailId)
+    });
+    return steps;
+  }
+
+  function generateHTLengthSteps(ht, subject, block) {
+    const steps = [];
+    const push = (spec) => steps.push(makeHTStep(ht, spec, block.marks));
+    let listId = subject.headId || null;
+    let len = 0;
+    const badges = Object.create(null);
+
+    push({
+      desc: '从 L 沿表尾指针 tp 统计同级表结点。',
+      line: 'func',
+      htHighlightNodeIds: listId ? [listId] : [],
+      variables: { L: listId || 'NULL', len: 0 },
+      result: '开始求长度'
+    });
+    push({
+      desc: '初始化 len = 0。',
+      line: 'init',
+      variables: { len: 0 },
+      result: 'len = 0'
+    });
+
+    while (listId && ht.nodes[listId]) {
+      const node = ht.nodes[listId];
+      push({
+        desc: '当前表结点 ' + listId + ' 非空，长度加一。',
+        line: 'loop',
+        htHighlightNodeIds: [listId],
+        variables: { L: listId, len },
+        result: '继续'
+      });
+      len += 1;
+      badges[listId] = '#' + len;
+      push({
+        desc: 'len = ' + len + '。',
+        line: 'count',
+        htHighlightNodeIds: [listId],
+        htBadges: { ...badges },
+        variables: { len },
+        result: 'len = ' + len
+      });
+      const nextId = node.tp || null;
+      push({
+        desc: nextId ? '沿 tp 前进到 ' + nextId + '。' : 'tp 为 NULL，长度统计结束。',
+        line: 'next',
+        htHighlightNodeIds: nextId ? [listId, nextId] : [listId],
+        htHighlightPointers: [listId + '.tp'],
+        htBadges: { ...badges },
+        variables: { L: nextId || 'NULL', len },
+        result: nextId || 'NULL'
+      });
+      listId = nextId;
+    }
+
+    push({
+      desc: '返回 len = ' + len + '。',
+      line: 'ret',
+      htBadges: { ...badges },
+      variables: { len },
+      result: String(len)
+    });
+    return steps;
+  }
+
+  function generateHTDepthSteps(ht, subject, block) {
+    const steps = [];
+    const push = (spec) => steps.push(makeHTStep(ht, spec, block.marks));
+
+    function depthOf(startId, level) {
+      if (!startId || !ht.nodes[startId]) {
+        push({
+          desc: '空表：深度基例返回 1。',
+          line: 'null',
+          variables: { L: 'NULL', d: 1, 层: level },
+          result: '1'
+        });
+        return 1;
+      }
+
+      let max = 0;
+      let listId = startId;
+      push({
+        desc: '进入一层表链，初始化 max = 0。',
+        line: 'init',
+        htHighlightNodeIds: [listId],
+        variables: { L: listId, max: 0, 层: level },
+        result: 'max = 0'
+      });
+
+      while (listId && ht.nodes[listId]) {
+        const node = ht.nodes[listId];
+        push({
+          desc: '检查表结点 ' + listId + ' 的 hp 指针。',
+          line: 'hp',
+          htHighlightNodeIds: [listId],
+          htHighlightPointers: [listId + '.hp'],
+          variables: { L: listId, hp: node.hp || 'NULL', max, 层: level },
+          result: 'hp = ' + (node.hp || 'NULL')
+        });
+
+        let d;
+        if (!node.hp) {
+          d = 1;
+          push({
+            desc: 'hp 为 NULL（空子表），深度记为 1。',
+            line: 'atom',
+            htHighlightNodeIds: [listId],
+            variables: { d: 1, max, 层: level },
+            result: 'd = 1'
+          });
+        } else {
+          const headNode = ht.nodes[node.hp];
+          if (headNode.tag === ATOM) {
+            d = 1;
+            push({
+              desc: 'hp 指向原子结点，深度记为 1。',
+              line: 'setAtom',
+              htHighlightNodeIds: [listId, node.hp],
+              htHighlightPointers: [listId + '.hp'],
+              variables: { d: 1, max, 层: level },
+              result: 'd = 1'
+            });
+          } else {
+            push({
+              desc: 'hp 指向子表，递归计算它的深度。',
+              line: 'recurse',
+              htHighlightNodeIds: [listId, node.hp],
+              htHighlightPointers: [listId + '.hp'],
+              variables: { L: node.hp, 层: level + 1 },
+              result: '递归'
+            });
+            d = depthOf(node.hp, level + 1);
+          }
+        }
+
+        if (d > max) {
+          max = d;
+          push({
+            desc: 'd = ' + d + ' 大于 max，更新 max。',
+            line: 'compare',
+            htHighlightNodeIds: [listId],
+            variables: { d, max, 层: level },
+            result: 'max = ' + max
+          });
+        }
+
+        const nextId = node.tp || null;
+        push({
+          desc: nextId ? '沿 tp 检查下一个表结点。' : 'tp 为 NULL，本层遍历结束。',
+          line: 'next',
+          htHighlightNodeIds: nextId ? [listId, nextId] : [listId],
+          htHighlightPointers: [listId + '.tp'],
+          variables: { L: nextId || 'NULL', max, 层: level },
+          result: nextId || 'NULL'
+        });
+        listId = nextId;
+      }
+
+      push({
+        desc: '本层返回 max + 1 = ' + (max + 1) + '。',
+        line: 'ret',
+        variables: { max, d: max + 1, 层: level },
+        result: String(max + 1)
+      });
+      return max + 1;
+    }
+
+    const result = depthOf(subject.headId || null, 0);
+    return { steps, result };
+  }
+
+  function createHTOperationRun(linearGraph, ht, subject, operation) {
+    const outcome = evaluateOperation(linearGraph, subject, operation);
+    const blockKey = HT_OPERATION_BLOCKS[operation];
+    const block = CODE_BLOCKS[blockKey];
+    if (!block) throw new Error('未知头尾链表操作：' + operation);
+    let steps;
+    if (operation === 'head') steps = generateHTHeadSteps(ht, subject, block);
+    else if (operation === 'tail') steps = generateHTTailSteps(ht, subject, block);
+    else if (operation === 'length') steps = generateHTLengthSteps(ht, subject, block);
+    else {
+      const generated = generateHTDepthSteps(ht, subject, block);
+      steps = generated.steps;
+    }
+    steps.forEach((step) => {
+      if (!Number.isInteger(step.codeLine) || step.codeLine < 1 || step.codeLine > block.lines.length) {
+        throw new Error('内部错误：头尾链表步骤代码行越界。');
+      }
+    });
+    return {
+      run: {
+        base: false,
+        storage: 'headtail',
+        graph: linearGraph,
+        htGraph: ht,
+        operation,
+        codeBlock: block,
+        layout: buildHTLayout(ht),
+        steps,
+        total: steps.length,
+        subject
+      },
+      outcome
+    };
+  }
+
+  function generateHTBuildSteps(ht) {
+    const block = CODE_BLOCKS.htBuild;
+    const steps = [];
+    const visible = new Set([ht.rootId]);
+    const total = Object.keys(ht.nodes).length - 1;
+    const push = (spec) => steps.push(makeHTStep(ht, spec, block.marks, visible));
+
+    function buildChain(startId, n, stack, level) {
+      if (!startId || n <= 0) {
+        push({
+          desc: 'BuildList(0) 返回 NULL。',
+          line: 'empty',
+          variables: { n: 0, 栈: stack, 已建: visible.size - 1 },
+          result: 'NULL'
+        });
+        return;
+      }
+
+      const listId = startId;
+      const node = ht.nodes[listId];
+      visible.add(listId);
+      const hp = node.hp || null;
+      const hpNode = hp ? ht.nodes[hp] : null;
+      let childCount = 0;
+      if (hpNode && hpNode.tag === LIST) childCount = chainLengthByTP(ht, hp);
+      const k = !hp ? -1 : (hpNode.tag === ATOM ? 0 : childCount);
+
+      push({
+        desc: `BuildList(${n})：创建当前表结点 ${listId}。`,
+        line: 'alloc',
+        htHighlightNodeIds: [listId],
+        variables: { n, p: listId, 栈: stack, 已建: visible.size - 1 },
+        result: `p = ${listId}`
+      });
+      push({
+        desc: `读入 k = ${k}。`,
+        line: 'read',
+        htHighlightNodeIds: [listId],
+        variables: { n, k, p: listId, 栈: stack },
+        result: `k = ${k}`
+      });
+      push({
+        desc: '当前表结点 tag = LIST。',
+        line: 'tagList',
+        htHighlightNodeIds: [listId],
+        variables: { p: listId, tag: 'LIST' },
+        result: 'tag = LIST'
+      });
+
+      if (!hp) {
+        push({
+          desc: 'hp 为空：这是一个空子表元素。',
+          line: 'else',
+          htHighlightNodeIds: [listId],
+          variables: { p: listId, hp: 'NULL', k: -1 },
+          result: 'hp = NULL'
+        });
+      } else if (hpNode.tag === ATOM) {
+        visible.add(hp);
+        push({
+          desc: 'hp 指向原子：分配 ATOM 结点 ' + hp + '。',
+          line: 'allocAtom',
+          htHighlightNodeIds: [listId, hp],
+          htHighlightPointers: [listId + '.hp'],
+          variables: { a: hp, value: hpNode.value, 已建: visible.size - 1 },
+          result: `ATOM ${hp}`
+        });
+        push({
+          desc: 'ATOM 结点读入 data = ' + hpNode.value + '。',
+          line: 'tagAtom',
+          htHighlightNodeIds: [hp],
+          variables: { a: hp, tag: 'ATOM' },
+          result: 'tag = ATOM'
+        });
+        push({
+          desc: '读入原子值并挂到 p->u.ptr.hp。',
+          line: 'linkHp',
+          htHighlightNodeIds: [listId, hp],
+          htHighlightPointers: [listId + '.hp'],
+          variables: { p: listId, hp, data: hpNode.value },
+          result: `hp = ${hp}`
+        });
+      } else {
+        push({
+          desc: 'hp 指向子表，递归 BuildList(' + childCount + ')。',
+          line: 'recurseHp',
+          htHighlightNodeIds: [listId, hp],
+          htHighlightPointers: [listId + '.hp'],
+          variables: { p: listId, hp, n: childCount, 栈: stack },
+          result: '递归 hp'
+        });
+        buildChain(hp, childCount, stack.concat(listId), level + 1);
+      }
+
+      const tailId = node.tp || null;
+      if (tailId) {
+        push({
+          desc: '继续构建表尾：BuildList(' + (n - 1) + ')。',
+          line: 'recurseTp',
+          htHighlightNodeIds: [listId],
+          htHighlightPointers: [listId + '.tp'],
+          variables: { p: listId, tp: tailId, n: n - 1, 栈: stack },
+          result: '递归 tp'
+        });
+        buildChain(tailId, n - 1, stack, level);
+      } else {
+        push({
+          desc: '表尾 BuildList(0) 返回 NULL。',
+          line: 'recurseTp',
+          htHighlightNodeIds: [listId],
+          variables: { p: listId, tp: 'NULL', n: 0 },
+          result: 'tp = NULL'
+        });
+      }
+
+      push({
+        desc: '当前表结点 ' + listId + ' 返回。',
+        line: 'ret',
+        htHighlightNodeIds: [listId],
+        variables: { p: listId, n, 已建: visible.size - 1 },
+        result: listId
+      });
+    }
+
+    push({
+      desc: '从根指针开始构建头尾链表。',
+      line: 'func',
+      variables: { n: chainLengthByTP(ht, ht.nodes[ht.rootId].hp), 栈: [ht.name || 'L'], 已建: 0 },
+      result: 'BuildList'
+    });
+
+    buildChain(ht.nodes[ht.rootId].hp || null, chainLengthByTP(ht, ht.nodes[ht.rootId].hp), [ht.name || 'L'], 0);
+
+    push({
+      desc: '创建完成：' + serializeHTGraph(ht) + '。',
+      line: 'ret',
+      variables: { 结点: total, 已建: total, 结果: serializeHTGraph(ht) },
+      result: serializeHTGraph(ht)
+    });
+
+    return steps;
+  }
+
+  function createHTBuildRun(ht) {
+    const block = CODE_BLOCKS.htBuild;
+    const steps = generateHTBuildSteps(ht);
+    steps.forEach((step) => {
+      if (!Number.isInteger(step.codeLine) || step.codeLine < 1 || step.codeLine > block.lines.length) {
+        throw new Error('内部错误：头尾链表创建步骤代码行越界。');
+      }
+    });
+    return {
+      run: {
+        base: false,
+        storage: 'headtail',
+        build: true,
+        htGraph: ht,
+        operation: 'ht-build',
+        codeBlock: block,
+        layout: buildHTLayout(ht),
+        steps,
+        total: steps.length,
+        subject: null
+      }
+    };
+  }
+
+  function createHTCompareRun(linearA, linearB, htA, htB, nameA, nameB) {
+    const canonical = generateCompareSteps(linearA, linearB, nameA, nameB);
+    const block = CODE_BLOCKS.htEqual;
+    const steps = canonical.steps.map((step) => {
+      const listA = step.compare ? step.compare.a : null;
+      const listB = step.compare ? step.compare.b : null;
+      const hpA = listA && htA.nodes[listA] ? htA.nodes[listA].hp : null;
+      const hpB = listB && htB.nodes[listB] ? htB.nodes[listB].hp : null;
+      const hpNullDiff = (hpA == null) !== (hpB == null);
+      const markMap = {
+        func: 'func',
+        empty: 'empty',
+        retTrue: 'retTrue',
+        oneEmpty: 'oneEmpty',
+        retFalse: 'retFalse',
+        tag: hpNullDiff ? 'hpNull' : 'tag',
+        failTag: hpNullDiff ? 'failHp' : 'failTag',
+        atom: 'atom',
+        data: 'data',
+        failData: 'failData',
+        recurse: 'recurse',
+        failSub: 'failSub',
+        next: 'next',
+        ret: 'ret'
+      };
+      const line = block.marks[markMap[step.mark] || 'ret'];
+      return {
+        desc: step.desc,
+        codeLine: line,
+        storage: 'headtail',
+        nodes: [],
+        htCompare: {
+          aList: listA,
+          bList: listB,
+          aHp: hpA,
+          bHp: hpB,
+          mismatch: !!(step.compare && step.compare.mismatch)
+        },
+        highlightNodeIds: [],
+        highlightPointers: [],
+        variables: step.variables,
+        result: step.result
+      };
+    });
+    const final = steps[steps.length - 1];
+    return {
+      run: {
+        base: false,
+        storage: 'headtail',
+        compare: true,
+        operation: 'ht-equal',
+        codeBlock: block,
+        graphA: linearA,
+        graphB: linearB,
+        htGraphA: htA,
+        htGraphB: htB,
+        nameA,
+        nameB,
+        layoutA: buildHTLayout(htA),
+        layoutB: buildHTLayout(htB),
+        steps,
+        total: steps.length,
+        equal: canonical.equal,
+        subject: null
+      },
+      equal: canonical.equal
     };
   }
 
@@ -1624,10 +2891,19 @@
 
     const dom = {
       exprInput: $('exprInput'),
-      operationSelect: $('operationSelect'),
-      startBtn: $('startBtn'),
-      runnerForm: $('runnerForm'),
+      caseForm: $('caseForm'),
+      caseChips: $('caseChips'),
+      caseNameInput: $('caseNameInput'),
+      saveCaseBtn: $('saveCaseBtn'),
+      caseFeedback: $('caseFeedback'),
+      buildCaseBtn: $('buildCaseBtn'),
+      compareCasesBtn: $('compareCasesBtn'),
       errorBanner: $('errorBanner'),
+      functionButtons: $('functionButtons'),
+      undoChainBtn: $('undoChainBtn'),
+      resetChainBtn: $('resetChainBtn'),
+      chainTrail: $('chainTrail'),
+      chainExpression: $('chainExpression'),
       quizOpenBtn: $('quizOpenBtn'),
       quizModal: $('quizModal'),
       quizCloseBtn: $('quizCloseBtn'),
@@ -1640,6 +2916,39 @@
       diagramViewport: $('diagramViewport'),
       diagramStage: $('diagramStage'),
       diagramSummary: $('diagramSummary'),
+      compareCanvas: $('compareCanvas'),
+      compareTitle: $('compareTitle'),
+      compareCurrent: $('compareCurrent'),
+      compareExitBtn: $('compareExitBtn'),
+      compareNameA: $('compareNameA'),
+      compareNameB: $('compareNameB'),
+      compareValueA: $('compareValueA'),
+      compareValueB: $('compareValueB'),
+      compareViewportA: $('compareViewportA'),
+      compareViewportB: $('compareViewportB'),
+      compareStageA: $('compareStageA'),
+      compareStageB: $('compareStageB'),
+      compareEdgeLayerA: $('compareEdgeLayerA'),
+      compareEdgeLayerB: $('compareEdgeLayerB'),
+      compareNodeLayerA: $('compareNodeLayerA'),
+      compareNodeLayerB: $('compareNodeLayerB'),
+      compareModal: $('compareModal'),
+      compareSelectA: $('compareSelectA'),
+      compareSelectB: $('compareSelectB'),
+      compareHint: $('compareHint'),
+      compareStartBtn: $('compareStartBtn'),
+      compareCloseBtn: $('compareCloseBtn'),
+      compareCancelBtn: $('compareCancelBtn'),
+      compareCloseBackdrop: document.querySelector('[data-compare-close]'),
+      storageBtns: Array.from(document.querySelectorAll('[data-storage]')),
+      themeToggle: $('themeToggle'),
+      linearLegend: $('linearLegend'),
+      htLegend: $('htLegend'),
+      htCanvas: $('htCanvas'),
+      htStage: $('htStage'),
+      htEdgeLayer: $('htEdgeLayer'),
+      htNodeLayer: $('htNodeLayer'),
+      typeDefSummary: $('typeDefSummary'),
       layerLayer: $('layerLayer'),
       edgeLayer: $('edgeLayer'),
       nodeLayer: $('nodeLayer'),
@@ -1658,10 +2967,13 @@
       progressSlider: $('progressSlider'),
       speedSelect: $('speedSelect'),
       stepProgressText: $('stepProgressText'),
-      codeNav: $('codeNav'),
+      codeTitle: $('codeTitle'),
       codeTotal: $('codeTotal'),
       codeScroll: $('codeScroll'),
-      codeLines: $('codeLines')
+      codeLines: $('codeLines'),
+      codeEmpty: $('codeEmpty'),
+      typeDefDetails: $('typeDefDetails'),
+      typeDefCode: $('typeDefCode')
     };
 
     // 避免 DOM 缺失导致难以定位的静默失败
@@ -1672,57 +2984,86 @@
     }
 
     const state = {
-      operation: 'create',
+      operation: null,
+      cases: [],
+      activeCaseIndex: -1,
+      graph: null,
+      subject: null,
+      chain: [],
       run: null,
       stepIndex: 0,
       playing: false,
       timerId: null,
       speed: 1,
       quizCategory: '全部',
-      quizReturnFocus: null
+      quizReturnFocus: null,
+      compareReturnFocus: null,
+      storage: 'linear',
+      linearGraph: null,
+      htGraph: null
     };
+
+    const DEFAULT_CASES = [
+      { name: 'A', expression: '(a,(b,c),d)' },
+      { name: 'B', expression: '(())' }
+    ];
 
     const nodeEls = new Map();
     const edgeEls = new Map();
+    const compareNodeEls = { a: new Map(), b: new Map() };
+    const compareEdgeEls = { a: new Map(), b: new Map() };
+    const htNodeEls = new Map();
+    const htEdgeEls = new Map();
+    const htCompareNodeEls = { a: new Map(), b: new Map() };
+    const htCompareEdgeEls = { a: new Map(), b: new Map() };
+    let compareRunRef = null;
+    let htCompareRunRef = null;
     let codeLineEls = [];
     let activeCodeLineEl = null;
     let resizeFrame = 0;
 
     const VARIABLE_LABELS = {
-      root: 'root',
-      pos: 'pos',
-      char: 'char',
-      node: 'node',
+      case: '案例',
+      head: 'head',
+      length: '顶层长度',
+      L: 'L',
+      p: 'p',
       tag: 'tag',
-      parent: 'parent',
-      pointer: 'pointer',
-      current: 'current',
+      current: '当前值',
       stack: '递归栈',
-      child: 'child',
-      index: 'i',
-      childDepth: 'childDepth',
-      maxDepth: 'maxDepth',
+      d: 'd',
+      max: 'max',
       depth: 'depth',
+      next: 'next',
+      value: '值',
       len: 'len',
+      '当前值': '当前值',
+      '当前对象': '当前对象',
+      n: 'n',
+      i: 'i',
+      k: 'k',
       p: 'p',
       head: 'head',
-      tail: 'tail',
-      next: 'next',
-      atom: 'atom',
-      count: '已访问',
-      sequence: '访问序列',
-      value: 'value',
-      rule: '口径',
-      branch: '分支',
-      empty: 'empty',
-      nodeCount: '节点数',
-      existingNode: '已有节点'
+      return: 'return',
+      '栈': '递归栈',
+      '已建': '已建结点',
+      '层': '层级',
+      A: 'A',
+      B: 'B',
+      tagA: 'tag A',
+      tagB: 'tag B',
+      dataA: 'data A',
+      dataB: 'data B',
+      '结论': '结论',
+      '结点': '结点',
+      '结果': '结果'
     };
 
     /* -------- C 代码渲染与行高亮 -------- */
 
     function renderCodeBlock(operation) {
-      const block = CODE_BLOCKS[operation] || CODE_BLOCKS.create;
+      const block = CODE_BLOCKS[operation];
+      if (!block) return;
       const fragment = document.createDocumentFragment();
       codeLineEls = [];
       activeCodeLineEl = null;
@@ -1756,8 +3097,28 @@
       });
 
       dom.codeLines.replaceChildren(fragment);
+      dom.codeTitle.textContent = `${state.storage === 'headtail' ? '头尾链表 · ' : ''}${block.title} 核心代码`;
       dom.codeTotal.textContent = `${block.lines.length} 行`;
+      dom.codeEmpty.hidden = true;
       dom.codeScroll.scrollTop = 0;
+      dom.typeDefDetails.open = false;
+    }
+
+    function renderBaseCodeState() {
+      clearActiveCodeLine();
+      codeLineEls = [];
+      dom.codeLines.replaceChildren();
+      const isHT = state.storage === 'headtail';
+      const source = isHT ? HT_TYPE_DEFINITION_SOURCE : TYPE_DEFINITION_SOURCE;
+      dom.typeDefCode.textContent = source;
+      dom.typeDefSummary.textContent = isHT
+        ? '头尾链表类型定义（ATOM / LIST / hp / tp）'
+        : '广义表类型定义（element / sublist / next）';
+      dom.codeTitle.textContent = isHT ? '头尾链表类型定义' : '广义表类型定义';
+      dom.codeTotal.textContent = source.split('\n').length + ' 行';
+      dom.codeEmpty.hidden = false;
+      dom.codeScroll.scrollTop = 0;
+      dom.typeDefDetails.open = true;
     }
 
     function scrollCodeToLine(lineNumber, alignTop) {
@@ -1803,33 +3164,516 @@
       }
     }
 
-    /* -------- 代码函数导航 -------- */
+    /* -------- 命名案例与嵌套函数链 -------- */
 
-    function buildCodeNav() {
-      const fragment = document.createDocumentFragment();
-      OPERATIONS.forEach((op) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'code-nav-btn';
-        button.dataset.operation = op.key;
-        button.textContent = op.label;
-        button.title = `查看并选择「${op.label}」`;
-        button.addEventListener('click', () => {
-          selectOperation(op.key, { scrollToFunction: true });
-          clearError();
-        });
-        fragment.appendChild(button);
-      });
-      dom.codeNav.replaceChildren(fragment);
-      updateCodeNav();
+    function setCaseFeedback(text, tone) {
+      let suffix = '';
+      if (tone === true || tone === 'error') suffix = ' is-error';
+      else if (tone === 'warning') suffix = ' is-warning';
+      dom.caseFeedback.textContent = text || '';
+      dom.caseFeedback.title = text || '';
+      dom.caseFeedback.className = 'case-feedback' + suffix;
     }
 
-    function updateCodeNav() {
-      dom.codeNav.querySelectorAll('.code-nav-btn').forEach((button) => {
-        const active = button.dataset.operation === state.operation;
+    function currentCaseName() {
+      if (state.activeCaseIndex >= 0 && state.cases[state.activeCaseIndex]) {
+        return state.cases[state.activeCaseIndex].name;
+      }
+      return state.chain.length ? state.chain[0].name : '表';
+    }
+
+    function renderCaseChips() {
+      const fragment = document.createDocumentFragment();
+      state.cases.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'case-chip';
+        button.classList.toggle('is-active', index === state.activeCaseIndex);
+        button.setAttribute('aria-pressed', index === state.activeCaseIndex ? 'true' : 'false');
+        button.textContent = item.name;
+        button.title = item.name + ' = ' + item.expression;
+        button.addEventListener('click', () => loadCase(index));
+        fragment.appendChild(button);
+      });
+      dom.caseChips.replaceChildren(fragment);
+      updateCaseTools();
+    }
+
+    function updateCaseTools() {
+      dom.buildCaseBtn.disabled = !state.graph;
+      dom.compareCasesBtn.disabled = state.cases.length < 2;
+    }
+
+    function startBuild() {
+      if (!state.graph) return;
+      stopPlayback();
+      clearError();
+
+      const active = state.activeCaseIndex >= 0 ? state.cases[state.activeCaseIndex] : null;
+      if (active) {
+        const draftName = dom.caseNameInput.value.trim();
+        const draftExpr = dom.exprInput.value.trim();
+        if (draftName !== active.name || draftExpr !== active.expression) {
+          showError('请先保存当前案例，再播放创建过程。');
+          return;
+        }
+      }
+
+      // 创建演示从当前案例的初始状态开始，不沿用之前的函数链。
+      if (state.chain.length > 1) {
+        state.chain = state.chain.slice(0, 1);
+        state.subject = state.chain[0].subject;
+      }
+
+      hideCompareView();
+      const created = state.storage === 'headtail'
+        ? createHTBuildRun(state.htGraph)
+        : createBuildRun(state.graph);
+      state.operation = state.storage === 'headtail' ? 'ht-build' : 'build';
+      state.run = created.run;
+      state.stepIndex = 0;
+
+      renderCodeBlock(state.storage === 'headtail' ? 'htBuild' : 'build');
+      renderChainTrail();
+      updateFunctionButtons();
+      updateCaseTools();
+      showStep(0);
+      updatePlaybackUI();
+
+      state.playing = true;
+      updatePlaybackUI();
+      scheduleNextStep();
+    }
+
+    function renderChainTrail() {
+      const fragment = document.createDocumentFragment();
+
+      state.chain.forEach((entry, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chain-node';
+        button.classList.toggle('is-current', index === state.chain.length - 1);
+        button.title = entry.label + ' = ' + entry.valueText;
+
+        const opEl = document.createElement('span');
+        opEl.className = 'chain-node__op';
+        opEl.textContent = entry.kind === 'base'
+          ? entry.name
+          : (OPERATION_BY_KEY[entry.op] ? OPERATION_BY_KEY[entry.op].label : entry.op);
+
+        const equalEl = document.createElement('span');
+        equalEl.className = 'chain-node__eq';
+        equalEl.textContent = '=';
+
+        const valueEl = document.createElement('span');
+        valueEl.className = 'chain-node__value';
+        valueEl.textContent = entry.valueText;
+
+        button.appendChild(opEl);
+        button.appendChild(equalEl);
+        button.appendChild(valueEl);
+        button.setAttribute('aria-label', entry.label + ' 的返回值：' + entry.valueText);
+        button.addEventListener('click', () => restoreChain(index));
+        fragment.appendChild(button);
+
+        if (index < state.chain.length - 1) {
+          const arrow = document.createElement('span');
+          arrow.className = 'chain-arrow';
+          arrow.textContent = '→';
+          fragment.appendChild(arrow);
+        }
+      });
+
+      if (!state.chain.length) {
+        const empty = document.createElement('span');
+        empty.className = 'chain-empty';
+        empty.textContent = '保存或选择一个案例后开始。';
+        fragment.appendChild(empty);
+      }
+
+      dom.chainTrail.replaceChildren(fragment);
+      dom.chainTrail.scrollLeft = dom.chainTrail.scrollWidth;
+      renderChainExpression();
+    }
+
+    function renderChainExpression() {
+      const fragment = document.createDocumentFragment();
+      const subject = state.subject;
+
+      const label = document.createElement('span');
+      label.className = 'chain-expression__label';
+      label.textContent = '当前对象';
+
+      const value = document.createElement('code');
+      value.className = 'chain-expression__value';
+      value.textContent = subject ? subject.exprLabel : '—';
+
+      fragment.appendChild(label);
+      fragment.appendChild(value);
+
+      if (subject) {
+        let hintText = '';
+        if (subject.kind === 'list') {
+          hintText = '· 可继续 GetHead / GetTail';
+        } else if (subject.kind === 'atom') {
+          hintText = '· 已取得原子 ' + subject.valueText;
+        } else if (subject.kind === 'undefined') {
+          hintText = '· 空表没有表头';
+        } else if (subject.kind === 'number') {
+          hintText = '· 数值结果 ' + subject.valueText;
+        }
+        if (hintText) {
+          const hint = document.createElement('span');
+          hint.className = 'chain-expression__hint';
+          hint.textContent = hintText;
+          fragment.appendChild(hint);
+        }
+      }
+
+      dom.chainExpression.replaceChildren(fragment);
+      dom.chainExpression.title = subject ? subject.exprLabel + ' = ' + subject.valueText : '';
+    }
+
+    function updateFunctionButtons() {
+      const canUseList = !!state.subject && state.subject.kind === 'list' && !!state.graph;
+      dom.functionButtons.querySelectorAll('.fn-btn').forEach((button) => {
+        button.disabled = !canUseList;
+      });
+      dom.undoChainBtn.disabled = state.chain.length <= 1;
+      dom.resetChainBtn.disabled = state.chain.length <= 1;
+    }
+
+    const THEME_STORAGE_KEY = 'glist-theme';
+
+    function currentTheme() {
+      return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
+
+    function applyTheme(theme, persist) {
+      const dark = theme === 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      if (dom.themeToggle) {
+        dom.themeToggle.setAttribute('aria-pressed', dark ? 'true' : 'false');
+        dom.themeToggle.title = dark ? '切换到浅色模式' : '切换到深色模式';
+        const label = dom.themeToggle.querySelector('.theme-toggle__label');
+        if (label) label.textContent = dark ? '浅色' : '深色';
+      }
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', dark ? '#0a1120' : '#eef3f8');
+      if (persist) {
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, dark ? 'dark' : 'light');
+        } catch (_) {
+          /* localStorage may be unavailable for local files */
+        }
+      }
+    }
+
+    function updateStorageUI() {
+      const isHT = state.storage === 'headtail';
+      dom.storageBtns.forEach((button) => {
+        const active = button.dataset.storage === state.storage;
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
+      dom.linearLegend.hidden = isHT;
+      dom.htLegend.hidden = !isHT;
+    }
+
+    function setStorage(nextStorage) {
+      if (nextStorage !== 'linear' && nextStorage !== 'headtail') return;
+      if (state.storage === nextStorage) return;
+      stopPlayback();
+      closeCompareModal();
+      clearError();
+      state.storage = nextStorage;
+      updateStorageUI();
+
+      if (!state.graph || !state.htGraph) return;
+      if (state.chain.length > 1) state.chain = state.chain.slice(0, 1);
+      state.subject = state.chain.length ? state.chain[0].subject : createBaseSubject(state.graph, currentCaseName());
+      showBaseView();
+      setCaseFeedback(nextStorage === 'headtail' ? '已切换为头尾链表存储' : '已切换为扩展线性链表存储', false);
+    }
+
+    function codeKeyFor(operation) {
+      if (state.storage === 'headtail') return HT_OPERATION_BLOCKS[operation] || operation;
+      return operation;
+    }
+
+    function showBaseView() {
+      if (!state.graph || !state.subject) return;
+      stopPlayback();
+      state.operation = null;
+      state.run = state.storage === 'headtail' && state.htGraph
+        ? createHTBaseView(state.graph, state.htGraph, state.subject)
+        : createBaseView(state.graph, state.subject, currentCaseName());
+      state.stepIndex = 0;
+      renderBaseCodeState();
+      showStep(0);
+      renderChainTrail();
+      updateFunctionButtons();
+    }
+
+    function loadCase(index) {
+      const item = state.cases[index];
+      if (!item) return;
+      clearError();
+      stopPlayback();
+
+      let graph;
+      try {
+        graph = parseExpression(item.expression, { name: item.name }).graph;
+      } catch (err) {
+        showError('案例载入失败：' + describeError(err));
+        return;
+      }
+
+      state.activeCaseIndex = index;
+      state.linearGraph = graph;
+      state.graph = graph;
+      state.htGraph = buildHTGraph(graph);
+      state.subject = createBaseSubject(graph, item.name);
+      state.chain = [{
+        kind: 'base',
+        name: item.name,
+        label: item.name,
+        valueText: state.subject.valueText,
+        subject: state.subject
+      }];
+
+      dom.caseNameInput.value = item.name;
+      dom.exprInput.value = serializeGraph(graph);
+      setCaseFeedback('');
+      renderCaseChips();
+      showBaseView();
+    }
+
+    function saveCase(event) {
+      if (event) event.preventDefault();
+      clearError();
+      setCaseFeedback('');
+
+      const name = dom.caseNameInput.value.trim();
+      const expression = dom.exprInput.value.trim();
+
+      if (!name) {
+        showError('案例名不能为空。', dom.caseNameInput);
+        return;
+      }
+      if (name.length > 12 || !/^[A-Za-z_\u4e00-\u9fa5][A-Za-z0-9_\u4e00-\u9fa5-]{0,11}$/.test(name)) {
+        showError('案例名需以字母、下划线或中文开头，最多 12 个字符。', dom.caseNameInput);
+        return;
+      }
+
+      let graph;
+      try {
+        graph = parseExpression(expression, { name }).graph;
+      } catch (err) {
+        showError('案例 ' + name + ' 保存失败：' + describeError(err));
+        return;
+      }
+
+      const canonical = serializeGraph(graph);
+      let index = state.cases.findIndex((item) => item.name === name);
+      const updated = index >= 0;
+      if (index < 0) {
+        state.cases.push({ name, expression: canonical });
+        index = state.cases.length - 1;
+      } else {
+        state.cases[index].expression = canonical;
+      }
+
+      loadCase(index);
+      setCaseFeedback(updated ? '已更新 ' + name + ' = ' + canonical : '已保存 ' + name + ' = ' + canonical, false);
+    }
+
+    function restoreChain(index) {
+      if (index < 0 || index >= state.chain.length) return;
+      stopPlayback();
+      state.chain = state.chain.slice(0, index + 1);
+      const entry = state.chain[state.chain.length - 1];
+      state.subject = entry.subject;
+      showBaseView();
+    }
+
+    function applyOperation(operation) {
+      if (!state.graph || !state.subject || state.subject.kind !== 'list') return;
+      stopPlayback();
+      clearError();
+
+      try {
+        const created = state.storage === 'headtail'
+          ? createHTOperationRun(state.graph, state.htGraph, state.subject, operation)
+          : createOperationRun(state.graph, operation, state.subject);
+        state.operation = operation;
+        state.run = created.run;
+        state.stepIndex = 0;
+
+        state.chain.push({
+          kind: 'op',
+          op: operation,
+          label: created.outcome.label,
+          valueText: created.outcome.resultText,
+          subject: created.outcome.subject
+        });
+        state.subject = created.outcome.subject;
+
+        renderCodeBlock(codeKeyFor(operation));
+        renderChainTrail();
+        updateFunctionButtons();
+        showStep(0);
+        updatePlaybackUI();
+
+        state.playing = true;
+        updatePlaybackUI();
+        scheduleNextStep();
+      } catch (err) {
+        showError('操作失败：' + describeError(err));
+      }
+    }
+
+    function undoChain() {
+      if (state.chain.length <= 1) return;
+      restoreChain(state.chain.length - 2);
+    }
+
+    function resetChain() {
+      if (state.chain.length <= 1) return;
+      restoreChain(0);
+    }
+
+    function loadAdHocCase(expression, label) {
+      clearError();
+      stopPlayback();
+      let graph;
+      try {
+        graph = parseExpression(expression, { name: label }).graph;
+      } catch (err) {
+        showError('题库示例载入失败：' + describeError(err));
+        return false;
+      }
+
+      state.activeCaseIndex = -1;
+      state.linearGraph = graph;
+      state.graph = graph;
+      state.htGraph = buildHTGraph(graph);
+      state.subject = createBaseSubject(graph, label);
+      state.chain = [{
+        kind: 'base',
+        name: label,
+        label,
+        valueText: state.subject.valueText,
+        subject: state.subject
+      }];
+      dom.caseNameInput.value = label;
+      dom.exprInput.value = serializeGraph(graph);
+      setCaseFeedback('已从经典题库载入示例 ' + label, false);
+      renderCaseChips();
+      showBaseView();
+      return true;
+    }
+
+    /* -------- 判等选择与判等播放 -------- */
+
+    function fillCompareSelect(select, selectedIndex) {
+      const fragment = document.createDocumentFragment();
+      state.cases.forEach((item, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = `${item.name} · ${item.expression}`;
+        fragment.appendChild(option);
+      });
+      select.replaceChildren(fragment);
+      select.value = String(selectedIndex);
+    }
+
+    function updateCompareHint() {
+      const a = state.cases[Number(dom.compareSelectA.value)];
+      const b = state.cases[Number(dom.compareSelectB.value)];
+      if (!a || !b) {
+        dom.compareHint.textContent = '请选择两个案例。';
+        dom.compareStartBtn.disabled = true;
+        return;
+      }
+      const storageLabel = state.storage === 'headtail' ? '头尾链表' : '扩展线性';
+      dom.compareHint.textContent = `${storageLabel}：${a.name} = ${a.expression}   ↔   ${b.name} = ${b.expression}`;
+      dom.compareStartBtn.disabled = false;
+    }
+
+    function openCompareModal() {
+      if (state.cases.length < 2) {
+        showError('至少需要两个已命名案例才能判等。');
+        return;
+      }
+      stopPlayback();
+      updatePlaybackUI();
+      state.compareReturnFocus = document.activeElement;
+
+      const left = state.activeCaseIndex >= 0 ? state.activeCaseIndex : 0;
+      const right = left + 1 < state.cases.length ? left + 1 : (left === 0 ? 0 : 0);
+      fillCompareSelect(dom.compareSelectA, left);
+      fillCompareSelect(dom.compareSelectB, right);
+      updateCompareHint();
+      dom.compareModal.hidden = false;
+      dom.compareSelectA.focus();
+    }
+
+    function closeCompareModal() {
+      if (dom.compareModal.hidden) return;
+      dom.compareModal.hidden = true;
+      const target = state.compareReturnFocus;
+      state.compareReturnFocus = null;
+      if (target && typeof target.focus === 'function') target.focus();
+    }
+
+    function startComparison() {
+      const a = state.cases[Number(dom.compareSelectA.value)];
+      const b = state.cases[Number(dom.compareSelectB.value)];
+      if (!a || !b) return;
+
+      let graphA;
+      let graphB;
+      let htA;
+      let htB;
+      try {
+        graphA = parseExpression(a.expression, { name: a.name }).graph;
+        graphB = parseExpression(b.expression, { name: b.name }).graph;
+        htA = buildHTGraph(graphA);
+        htB = buildHTGraph(graphB);
+      } catch (err) {
+        showError('判等案例解析失败：' + describeError(err));
+        return;
+      }
+
+      const created = state.storage === 'headtail'
+        ? createHTCompareRun(graphA, graphB, htA, htB, a.name, b.name)
+        : createCompareRun(graphA, graphB, a.name, b.name);
+      closeCompareModal();
+      stopPlayback();
+      clearError();
+      state.operation = state.storage === 'headtail' ? 'ht-equal' : 'equal';
+      state.run = created.run;
+      state.stepIndex = 0;
+      clearCompareStage();
+      hideCompareView();
+      renderCodeBlock(state.storage === 'headtail' ? 'htEqual' : 'equal');
+      updateCaseTools();
+      showStep(0);
+      updatePlaybackUI();
+
+      state.playing = true;
+      updatePlaybackUI();
+      scheduleNextStep();
+    }
+
+    function exitCompareToActive() {
+      if (!state.run || !state.run.compare) return;
+      if (state.activeCaseIndex >= 0) {
+        loadCase(state.activeCaseIndex);
+      } else {
+        showBaseView();
+      }
     }
 
     /* -------- 经典题库 -------- */
@@ -1989,50 +3833,26 @@
 
     function applyQuizDemo(demo) {
       closeQuiz();
-      dom.exprInput.value = demo.expression;
-      clearError();
-      state.operation = demo.operation;
-      dom.operationSelect.value = demo.operation;
-      updateCodeNav();
-      renderCodeBlock(demo.operation);
-      resetToReady(READY_MESSAGES[demo.operation]);
-      startPresentation();
-    }
-
-    /* -------- 操作切换 -------- */
-
-    function selectOperation(operation, options) {
-      const opts = options || {};
-      const meta = OPERATION_BY_KEY[operation];
-      if (!meta) return;
-
-      const sameOperation = state.operation === operation;
-      state.operation = operation;
-      dom.operationSelect.value = operation;
-      updateCodeNav();
-
-      if (!sameOperation) {
-        renderCodeBlock(operation);
-      }
-
-      // 点击当前操作对应的代码导航时，不打断正在回看的步骤。
-      if (opts.keepRun !== true && !(sameOperation && state.run)) {
-        resetToReady(READY_MESSAGES[operation]);
+      const loaded = loadAdHocCase(demo.expression, '例题');
+      if (loaded && OPERATION_BY_KEY[demo.operation]) {
+        applyOperation(demo.operation);
       }
     }
 
     /* -------- 错误提示 -------- */
 
-    function showError(message) {
+    function showError(message, field) {
       dom.errorBanner.textContent = message;
       dom.errorBanner.hidden = false;
-      dom.exprInput.setAttribute('aria-invalid', 'true');
+      const target = field || dom.exprInput;
+      target.setAttribute('aria-invalid', 'true');
     }
 
     function clearError() {
       dom.errorBanner.hidden = true;
       dom.errorBanner.textContent = '';
       dom.exprInput.removeAttribute('aria-invalid');
+      dom.caseNameInput.removeAttribute('aria-invalid');
     }
 
     /* -------- 节点图渲染 -------- */
@@ -2088,6 +3908,534 @@
       dom.diagramStage.style.transform = '';
     }
 
+    function createCompareNode(node) {
+      const el = document.createElement('div');
+      el.className = 'gl-node cmp-node';
+      el.dataset.nodeId = node.id;
+
+      const idEl = document.createElement('span');
+      idEl.className = 'node-id';
+      idEl.textContent = node.root ? 'L' : node.id;
+
+      const mainEl = document.createElement('span');
+      mainEl.className = 'node-main';
+
+      const tagEl = document.createElement('span');
+      tagEl.className = 'node-tag';
+
+      if (node.root || node.tag === ROOT) {
+        el.classList.add('gl-node--root');
+        mainEl.textContent = node.name || 'GList';
+        tagEl.textContent = 'GList';
+      } else if (node.tag === ATOM) {
+        el.classList.add('gl-node--atom');
+        mainEl.textContent = node.value == null ? '?' : node.value;
+        tagEl.textContent = 'element';
+      } else {
+        el.classList.add('gl-node--list');
+        mainEl.textContent = '子表';
+        tagEl.textContent = 'sublist';
+      }
+
+      el.appendChild(idEl);
+      el.appendChild(mainEl);
+      el.appendChild(tagEl);
+      return el;
+    }
+
+    function renderCompareGraph(panelKey, graph, layout) {
+      const isA = panelKey === 'a';
+      const nodeLayer = isA ? dom.compareNodeLayerA : dom.compareNodeLayerB;
+      const edgeLayer = isA ? dom.compareEdgeLayerA : dom.compareEdgeLayerB;
+      const stage = isA ? dom.compareStageA : dom.compareStageB;
+      const nodeMap = compareNodeEls[panelKey];
+
+      nodeMap.clear();
+      compareEdgeEls[panelKey].clear();
+      nodeLayer.replaceChildren();
+      edgeLayer.replaceChildren();
+
+      stage.style.width = `${layout.width}px`;
+      stage.style.height = `${layout.height}px`;
+      edgeLayer.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+
+      const svgNs = 'http://www.w3.org/2000/svg';
+      const defs = document.createElementNS(svgNs, 'defs');
+      ['root', 'child', 'next'].forEach((type) => {
+        const marker = document.createElementNS(svgNs, 'marker');
+        marker.setAttribute('id', `cmp-arrow-${panelKey}-${type}`);
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '8');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '6');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('orient', 'auto-start-reverse');
+        const path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        path.setAttribute('class', `edge-marker edge-marker--${type}`);
+        marker.appendChild(path);
+        defs.appendChild(marker);
+      });
+      edgeLayer.appendChild(defs);
+
+      Object.keys(graph.nodes).forEach((id) => {
+        const node = graph.nodes[id];
+        const pos = layout.positions[id];
+        if (!pos) return;
+        const el = createCompareNode(node);
+        el.style.left = `${pos.x - pos.w / 2}px`;
+        el.style.top = `${pos.y - pos.h / 2}px`;
+        el.style.width = `${pos.w}px`;
+        el.style.height = `${pos.h}px`;
+        el.title = node.root ? node.name : (node.tag === ATOM ? `element ${node.value}` : 'sublist');
+        nodeLayer.appendChild(el);
+        nodeMap.set(id, el);
+      });
+
+      Object.keys(graph.nodes).forEach((id) => {
+        const node = graph.nodes[id];
+        const fromPos = layout.positions[id];
+        if (!fromPos) return;
+        if (node.child && graph.nodes[node.child]) {
+          const edgeType = (node.root || node.tag === ROOT) ? 'root' : 'child';
+          const path = document.createElementNS(svgNs, 'path');
+          const geometry = measureEdgePath(fromPos, layout.positions[node.child], 'child');
+          path.setAttribute('d', geometry.d);
+          path.setAttribute('class', `cmp-edge cmp-edge--${edgeType}`);
+          path.setAttribute('marker-end', `url(#cmp-arrow-${panelKey}-${edgeType})`);
+          edgeLayer.appendChild(path);
+          compareEdgeEls[panelKey].set(`${id}.child`, path);
+        }
+        if (node.next && graph.nodes[node.next]) {
+          const path = document.createElementNS(svgNs, 'path');
+          const geometry = measureEdgePath(fromPos, layout.positions[node.next], 'next');
+          path.setAttribute('d', geometry.d);
+          path.setAttribute('class', 'cmp-edge cmp-edge--next');
+          path.setAttribute('marker-end', `url(#cmp-arrow-${panelKey}-next)`);
+          edgeLayer.appendChild(path);
+          compareEdgeEls[panelKey].set(`${id}.next`, path);
+        }
+      });
+    }
+
+    function buildCompareStage(run) {
+      compareNodeEls.a.clear();
+      compareNodeEls.b.clear();
+      compareEdgeEls.a.clear();
+      compareEdgeEls.b.clear();
+      dom.compareCanvas.classList.remove('is-equal', 'is-different');
+      dom.compareNameA.textContent = run.nameA;
+      dom.compareNameB.textContent = run.nameB;
+      dom.compareValueA.textContent = serializeGraph(run.graphA);
+      dom.compareValueB.textContent = serializeGraph(run.graphB);
+      dom.compareValueA.title = serializeGraph(run.graphA);
+      dom.compareValueB.title = serializeGraph(run.graphB);
+      renderCompareGraph('a', run.graphA, run.layoutA);
+      renderCompareGraph('b', run.graphB, run.layoutB);
+      compareRunRef = run;
+    }
+
+    function compareNodeDescription(graph, id) {
+      if (!id) return 'NULL';
+      const node = graph.nodes[id];
+      if (!node) return id;
+      return node.tag === ATOM
+        ? `${id} · element ${node.value}`
+        : `${id} · sublist`;
+    }
+
+    function renderComparison(step) {
+      const run = state.run;
+      if (!run || !run.compare) return;
+
+      dom.diagramStage.hidden = true;
+      dom.htCanvas.hidden = true;
+      dom.compareCanvas.hidden = false;
+      dom.canvasMetric.hidden = true;
+      dom.laneLabel.hidden = true;
+      dom.layerLayer.replaceChildren();
+      dom.canvasEmpty.hidden = true;
+
+      if (compareRunRef !== run) {
+        buildCompareStage(run);
+      }
+
+      ['a', 'b'].forEach((key) => {
+        compareNodeEls[key].forEach((el) => {
+          el.classList.remove('is-active');
+          el.classList.remove('is-mismatch');
+        });
+      });
+
+      const pair = step.compare || { a: null, b: null };
+      if (pair.a && compareNodeEls.a.has(pair.a)) {
+        const el = compareNodeEls.a.get(pair.a);
+        el.classList.add('is-active');
+        if (pair.mismatch) el.classList.add('is-mismatch');
+      }
+      if (pair.b && compareNodeEls.b.has(pair.b)) {
+        const el = compareNodeEls.b.get(pair.b);
+        el.classList.add('is-active');
+        if (pair.mismatch) el.classList.add('is-mismatch');
+      }
+
+      dom.compareTitle.textContent = `${run.nameA} ↔ ${run.nameB}`;
+      dom.compareCurrent.textContent =
+        `${run.nameA}：${compareNodeDescription(run.graphA, pair.a)}   ↔   ${run.nameB}：${compareNodeDescription(run.graphB, pair.b)}` +
+        (step.result && step.result !== '继续' ? ` · ${step.result}` : '');
+      dom.compareCurrent.title = dom.compareCurrent.textContent;
+      dom.diagramSummary.textContent = `判等 · ${run.nameA} ↔ ${run.nameB}`;
+
+      const isFinal = state.stepIndex >= run.total - 1;
+      dom.compareCanvas.classList.toggle('is-equal', isFinal && !!run.equal);
+      dom.compareCanvas.classList.toggle('is-different', isFinal && !run.equal);
+
+      requestAnimationFrame(fitCompare);
+    }
+
+    function fitComparePanel(viewport, stage, layout) {
+      if (!viewport || !stage || !layout) return;
+      const width = viewport.clientWidth;
+      const height = viewport.clientHeight;
+      if (!width || !height) return;
+      const padding = 10;
+      const scale = Math.max(0.12, Math.min(
+        1.15,
+        (width - padding * 2) / layout.width,
+        (height - padding * 2) / layout.height
+      ));
+      const offsetX = Math.max(padding, (width - layout.width * scale) / 2);
+      const offsetY = Math.max(padding, (height - layout.height * scale) / 2);
+      stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    }
+
+    function fitCompare() {
+      if (!state.run || !state.run.compare) return;
+      fitComparePanel(dom.compareViewportA, dom.compareStageA, state.run.layoutA);
+      fitComparePanel(dom.compareViewportB, dom.compareStageB, state.run.layoutB);
+    }
+
+    function hideCompareView() {
+      dom.compareCanvas.hidden = true;
+      dom.diagramStage.hidden = false;
+      dom.compareCanvas.classList.remove('is-equal', 'is-different');
+    }
+
+    function clearCompareStage() {
+      ['a', 'b'].forEach((key) => {
+        compareNodeEls[key].forEach((el) => el.remove());
+        compareNodeEls[key].clear();
+        compareEdgeEls[key].forEach((el) => el.remove());
+        compareEdgeEls[key].clear();
+      });
+      dom.compareNodeLayerA.replaceChildren();
+      dom.compareNodeLayerB.replaceChildren();
+      dom.compareEdgeLayerA.replaceChildren();
+      dom.compareEdgeLayerB.replaceChildren();
+      ['a', 'b'].forEach((key) => {
+        htCompareNodeEls[key].forEach((el) => el.remove());
+        htCompareNodeEls[key].clear();
+        htCompareEdgeEls[key].forEach((el) => el.remove());
+        htCompareEdgeEls[key].clear();
+      });
+      compareRunRef = null;
+      htCompareRunRef = null;
+    }
+
+    function createHTNodeElement(node) {
+      const el = document.createElement('div');
+      el.className = 'ht-node';
+      el.dataset.nodeId = node.id;
+
+      const nodeId = document.createElement('span');
+      nodeId.className = 'ht-node__id';
+      nodeId.textContent = node.root ? 'L' : node.id;
+
+      const main = document.createElement('span');
+      main.className = 'ht-node__main';
+
+      const tag = document.createElement('span');
+      tag.className = 'ht-node__tag';
+
+      if (node.root || node.tag === ROOT) {
+        el.classList.add('ht-node--root');
+        main.textContent = node.name || 'GList';
+        tag.textContent = 'GList';
+      } else if (node.tag === ATOM) {
+        el.classList.add('ht-node--atom');
+        main.textContent = node.value == null ? '?' : node.value;
+        tag.textContent = 'ATOM';
+      } else {
+        el.classList.add('ht-node--list');
+        main.textContent = 'LIST';
+        tag.textContent = node.hp ? 'hp · tp' : 'hp=NULL';
+      }
+
+      const badge = document.createElement('span');
+      badge.className = 'ht-node__badge';
+      badge.hidden = true;
+
+      el.appendChild(nodeId);
+      el.appendChild(main);
+      el.appendChild(tag);
+      el.appendChild(badge);
+      return el;
+    }
+
+    function drawHTGraph(ht, layout, nodeLayer, edgeLayer, nodeMap, edgeMap, options) {
+      const opts = options || {};
+      const visible = opts.visibleIds || null;
+      const highlight = new Set(opts.highlightNodeIds || []);
+      const hotPointers = new Set(opts.highlightPointers || []);
+      const badges = opts.badges || null;
+      const prefix = opts.prefix || 'single';
+
+      nodeLayer.replaceChildren();
+      edgeLayer.replaceChildren();
+      nodeMap.clear();
+      edgeMap.clear();
+
+      const svgNs = 'http://www.w3.org/2000/svg';
+      const defs = document.createElementNS(svgNs, 'defs');
+      ['root', 'hp', 'tp'].forEach((type) => {
+        const marker = document.createElementNS(svgNs, 'marker');
+        marker.setAttribute('id', `ht-arrow-${prefix}-${type}`);
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '8');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '6');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('orient', 'auto-start-reverse');
+        const path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        path.setAttribute('class', `ht-marker ht-marker--${type}`);
+        marker.appendChild(path);
+        defs.appendChild(marker);
+      });
+      edgeLayer.appendChild(defs);
+
+      Object.keys(ht.nodes).forEach((id) => {
+        if (visible && !visible.has(id)) return;
+        const node = ht.nodes[id];
+        const pos = layout.positions[id];
+        if (!pos) return;
+        const el = createHTNodeElement(node);
+        el.style.left = `${pos.x - pos.w / 2}px`;
+        el.style.top = `${pos.y - pos.h / 2}px`;
+        el.style.width = `${pos.w}px`;
+        el.style.height = `${pos.h}px`;
+        el.classList.toggle('is-active', highlight.has(id));
+        if (opts.returnedNodeId === id) el.classList.add('is-returned');
+        const badgeText = badges && badges[id];
+        if (badgeText) {
+          const badge = el.querySelector('.ht-node__badge');
+          badge.hidden = false;
+          badge.textContent = badgeText;
+        }
+        nodeLayer.appendChild(el);
+        nodeMap.set(id, el);
+      });
+
+      function addEdge(fromId, toId, type) {
+        if (!nodeMap.has(fromId) || !nodeMap.has(toId)) return;
+        const fromPos = layout.positions[fromId];
+        const toPos = layout.positions[toId];
+        if (!fromPos || !toPos) return;
+        const key = `${fromId}.${type === 'tp' ? 'tp' : 'hp'}`;
+        const geometry = measureEdgePath(fromPos, toPos, type === 'tp' ? 'next' : 'child');
+        const group = document.createElementNS(svgNs, 'g');
+        group.setAttribute('class', 'ht-edge-group');
+        const path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('class', `ht-edge ht-edge--${type}${hotPointers.has(key) ? ' is-hot' : ''}`);
+        path.setAttribute('d', geometry.d);
+        path.setAttribute('marker-end', `url(#ht-arrow-${prefix}-${type})`);
+        group.appendChild(path);
+
+        const labelText = type === 'tp' ? 'tp' : (type === 'hp' ? 'hp' : 'GList');
+        const labelWidth = type === 'tp' ? 20 : (type === 'hp' ? 22 : 36);
+        const bg = document.createElementNS(svgNs, 'rect');
+        bg.setAttribute('class', 'ht-edge-label-bg');
+        bg.setAttribute('x', String(geometry.labelX - labelWidth / 2));
+        bg.setAttribute('y', String(geometry.labelY - 7));
+        bg.setAttribute('width', String(labelWidth));
+        bg.setAttribute('height', '11');
+        bg.setAttribute('rx', '3');
+        const text = document.createElementNS(svgNs, 'text');
+        text.setAttribute('class', `ht-edge-label ht-edge-label--${type}`);
+        text.setAttribute('x', String(geometry.labelX));
+        text.setAttribute('y', String(geometry.labelY + 2));
+        text.setAttribute('text-anchor', 'middle');
+        text.textContent = labelText;
+        group.appendChild(bg);
+        group.appendChild(text);
+        edgeLayer.appendChild(group);
+        edgeMap.set(key, group);
+      }
+
+      const root = ht.nodes[ht.rootId];
+      if (root && root.hp) addEdge(root.id, root.hp, 'root');
+      Object.keys(ht.nodes).forEach((id) => {
+        if (visible && !visible.has(id)) return;
+        const node = ht.nodes[id];
+        if (node.tag !== LIST) return;
+        if (node.hp) addEdge(id, node.hp, 'hp');
+        if (node.tp) addEdge(id, node.tp, 'tp');
+      });
+    }
+
+    function fitHTStage() {
+      if (!state.run || state.storage !== 'headtail' || !dom.htStage) return;
+      const layout = state.run.layout;
+      if (!layout) return;
+      const viewportWidth = dom.diagramViewport.clientWidth;
+      const viewportHeight = dom.diagramViewport.clientHeight;
+      if (!viewportWidth || !viewportHeight) return;
+      const padding = 18;
+      const scale = Math.max(0.12, Math.min(
+        1.25,
+        (viewportWidth - padding * 2) / layout.width,
+        (viewportHeight - padding * 2) / layout.height
+      ));
+      const offsetX = Math.max(padding, (viewportWidth - layout.width * scale) / 2);
+      const offsetY = Math.max(padding, (viewportHeight - layout.height * scale) / 2);
+      dom.htStage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    }
+
+    function renderHTDiagram(step) {
+      const run = state.run;
+      if (!run || !run.htGraph || !run.layout) return;
+      const ht = run.htGraph;
+      const visible = new Set((step.htNodes || []).map((node) => node.id));
+
+      dom.diagramStage.hidden = true;
+      dom.compareCanvas.hidden = true;
+      dom.htCanvas.hidden = false;
+      dom.layerLayer.replaceChildren();
+      dom.laneLabel.hidden = true;
+      dom.canvasEmpty.hidden = true;
+
+      drawHTGraph(ht, run.layout, dom.htNodeLayer, dom.htEdgeLayer, htNodeEls, htEdgeEls, {
+        visibleIds: visible,
+        highlightNodeIds: step.htHighlightNodeIds,
+        highlightPointers: step.htHighlightPointers,
+        badges: step.htBadges,
+        returnedNodeId: step.htReturnedNodeId,
+        prefix: 'single'
+      });
+
+      dom.htStage.style.width = `${run.layout.width}px`;
+      dom.htStage.style.height = `${run.layout.height}px`;
+
+      const nodes = step.htNodes || [];
+      const listCount = nodes.filter((node) => node.tag === LIST).length;
+      const atomCount = nodes.filter((node) => node.tag === ATOM).length;
+      dom.diagramSummary.textContent = `${run.htGraph.name || '表'}（GList） · ${listCount} 个 LIST · ${atomCount} 个 ATOM`;
+
+      const vars = step.variables || {};
+      let metric = '';
+      if (run.operation === 'ht-build' && vars['已建'] != null) metric = `已建 ${vars['已建']} 个结点`;
+      else if (run.operation === 'length' && vars.len != null) metric = `len = ${vars.len}`;
+      else if (run.operation === 'depth') {
+        const parts = [];
+        if (vars.d != null) parts.push(`d = ${vars.d}`);
+        if (vars.max != null) parts.push(`max = ${vars.max}`);
+        if (parts.length) metric = parts.join(' · ');
+      }
+      dom.canvasMetric.hidden = !metric;
+      dom.canvasMetric.textContent = metric;
+      dom.canvasMetric.classList.toggle('is-depth', run.operation === 'depth');
+
+      requestAnimationFrame(fitHTStage);
+    }
+
+    function hideHTView() {
+      dom.htCanvas.hidden = true;
+    }
+
+    function htCompareSummary(ht, listId, hpId) {
+      if (!listId) return 'NULL';
+      const head = hpId && ht.nodes[hpId] ? (ht.nodes[hpId].tag === ATOM ? `atom ${ht.nodes[hpId].value}` : 'sublist') : 'hp=NULL';
+      return `${listId} · ${head}`;
+    }
+
+    function renderHTComparison(step) {
+      const run = state.run;
+      if (!run || !run.compare || !run.htGraphA || !run.htGraphB) return;
+      dom.diagramStage.hidden = true;
+      dom.htCanvas.hidden = true;
+      dom.compareCanvas.hidden = false;
+      dom.canvasMetric.hidden = true;
+      dom.laneLabel.hidden = true;
+      dom.layerLayer.replaceChildren();
+      dom.canvasEmpty.hidden = true;
+
+      if (htCompareRunRef !== run) {
+        htCompareNodeEls.a.clear();
+        htCompareNodeEls.b.clear();
+        htCompareEdgeEls.a.clear();
+        htCompareEdgeEls.b.clear();
+        dom.compareNodeLayerA.replaceChildren();
+        dom.compareNodeLayerB.replaceChildren();
+        dom.compareEdgeLayerA.replaceChildren();
+        dom.compareEdgeLayerB.replaceChildren();
+        dom.compareNameA.textContent = run.nameA;
+        dom.compareNameB.textContent = run.nameB;
+        dom.compareValueA.textContent = serializeHTGraph(run.htGraphA);
+        dom.compareValueB.textContent = serializeHTGraph(run.htGraphB);
+        dom.compareValueA.title = serializeHTGraph(run.htGraphA);
+        dom.compareValueB.title = serializeHTGraph(run.htGraphB);
+        dom.compareStageA.style.width = `${run.layoutA.width}px`;
+        dom.compareStageA.style.height = `${run.layoutA.height}px`;
+        dom.compareStageB.style.width = `${run.layoutB.width}px`;
+        dom.compareStageB.style.height = `${run.layoutB.height}px`;
+        drawHTGraph(run.htGraphA, run.layoutA, dom.compareNodeLayerA, dom.compareEdgeLayerA, htCompareNodeEls.a, htCompareEdgeEls.a, {
+          prefix: 'compare-a'
+        });
+        drawHTGraph(run.htGraphB, run.layoutB, dom.compareNodeLayerB, dom.compareEdgeLayerB, htCompareNodeEls.b, htCompareEdgeEls.b, {
+          prefix: 'compare-b'
+        });
+        htCompareRunRef = run;
+        dom.compareCanvas.classList.remove('is-equal', 'is-different');
+      }
+
+      ['a', 'b'].forEach((key) => {
+        htCompareNodeEls[key].forEach((el) => {
+          el.classList.remove('is-active');
+          el.classList.remove('is-mismatch');
+        });
+      });
+
+      const pair = step.htCompare || {};
+      const aIds = [pair.aList, pair.aHp].filter(Boolean);
+      const bIds = [pair.bList, pair.bHp].filter(Boolean);
+      aIds.forEach((id) => {
+        const el = htCompareNodeEls.a.get(id);
+        if (el) {
+          el.classList.add('is-active');
+          if (pair.mismatch) el.classList.add('is-mismatch');
+        }
+      });
+      bIds.forEach((id) => {
+        const el = htCompareNodeEls.b.get(id);
+        if (el) {
+          el.classList.add('is-active');
+          if (pair.mismatch) el.classList.add('is-mismatch');
+        }
+      });
+
+      dom.compareTitle.textContent = `${run.nameA} ↔ ${run.nameB}`;
+      dom.compareCurrent.textContent =
+        `${run.nameA}：${htCompareSummary(run.htGraphA, pair.aList, pair.aHp)}   ↔   ${run.nameB}：${htCompareSummary(run.htGraphB, pair.bList, pair.bHp)}` +
+        (step.result && step.result !== '继续' ? ` · ${step.result}` : '');
+      dom.compareCurrent.title = dom.compareCurrent.textContent;
+      dom.diagramSummary.textContent = `头尾链表判等 · ${run.nameA} ↔ ${run.nameB}`;
+      const isFinal = state.stepIndex >= run.total - 1;
+      dom.compareCanvas.classList.toggle('is-equal', isFinal && !!run.equal);
+      dom.compareCanvas.classList.toggle('is-different', isFinal && !run.equal);
+
+      requestAnimationFrame(fitCompare);
+    }
+
     function renderNodes(step) {
       const currentIds = new Set(step.nodes.map((node) => node.id));
 
@@ -2106,9 +4454,12 @@
         let el = nodeEls.get(node.id);
         if (!el) el = createNodeElement(node);
 
-        const effectiveKind = node.tag || (node.id.charAt(0) === 'A' ? ATOM : LIST);
+        const effectiveKind = node.tag || (
+          node.id.charAt(0) === 'E' ? ATOM : (node.root ? ROOT : LIST)
+        );
         el.classList.toggle('gl-node--atom', effectiveKind === ATOM);
         el.classList.toggle('gl-node--list', effectiveKind === LIST);
+        el.classList.toggle('gl-node--root', effectiveKind === ROOT || !!node.root);
         el.classList.toggle('gl-node--synthetic', !!node.synthetic);
         el.classList.toggle('is-active', activeIds.has(node.id));
         el.classList.toggle('is-visited', visitedIds.has(node.id));
@@ -2132,21 +4483,20 @@
         const childRefEl = el.querySelector('.node-child-ref');
         const badgeEl = el.querySelector('.node-badge');
 
-        idEl.textContent = node.id;
+        idEl.textContent = node.root ? 'L' : node.id;
 
-        if (node.tag === ATOM) {
+        if (node.root || node.tag === ROOT) {
+          mainEl.textContent = node.name || 'GList';
+          tagEl.textContent = 'GList';
+          childRefEl.hidden = true;
+        } else if (node.tag === ATOM) {
           mainEl.textContent = node.value == null ? '?' : node.value;
-          tagEl.textContent = 'ATOM';
+          tagEl.textContent = 'element';
           childRefEl.hidden = true;
         } else if (node.tag === LIST) {
-          mainEl.textContent = node.synthetic ? '表尾' : '表';
-          tagEl.textContent = 'LIST';
-          if (node.synthetic) {
-            childRefEl.hidden = false;
-            childRefEl.textContent = `child→${node.child || 'NULL'}`;
-          } else {
-            childRefEl.hidden = true;
-          }
+          mainEl.textContent = '子表';
+          tagEl.textContent = 'sublist';
+          childRefEl.hidden = true;
         } else {
           mainEl.textContent = '…';
           tagEl.textContent = '?';
@@ -2157,16 +4507,20 @@
         if (badgeText) {
           badgeEl.hidden = false;
           badgeEl.textContent = String(badgeText);
-          badgeEl.classList.toggle('node-badge--depth', state.operation === 'depth');
+          badgeEl.classList.toggle('node-badge--depth', !!(state.run && state.run.operation === 'depth'));
         } else {
           badgeEl.hidden = true;
           badgeEl.textContent = '';
         }
 
-        const accessibleKind = effectiveKind === ATOM ? '原子' : '表';
-        const accessibleValue = node.tag === ATOM ? `，值为 ${node.value}` : '';
+        const accessibleKind = node.root ? 'GList 锚点'
+          : (effectiveKind === ATOM ? 'element 元素结点' : 'sublist 子表结点');
+        const accessibleValue = node.tag === ATOM ? `，值 ${node.value}，data ${node.data}` : '';
         const accessibleBadge = badgeText ? `，标记 ${badgeText}` : '';
-        el.setAttribute('aria-label', `${accessibleKind}节点 ${node.id}${accessibleValue}${accessibleBadge}`);
+        el.setAttribute('aria-label', `${accessibleKind} ${node.id}${accessibleValue}${accessibleBadge}`);
+        el.title = node.tag === ATOM
+          ? `data = ${node.data}（输入标记 ${node.value}）`
+          : (node.root ? `GList ${node.name}` : 'sublist');
       });
     }
 
@@ -2230,11 +4584,16 @@
       if (!fromPos || !toPos) return;
 
       const field = key.endsWith('.child') ? 'child' : 'next';
+      const isRoot = !!fromNode.root || fromNode.tag === ROOT;
+      const edgeType = field === 'next' ? 'next' : (isRoot ? 'root' : 'child');
+      const labelText = field === 'next' ? 'next' : (isRoot ? 'GList' : 'sub_list');
+      const labelWidth = field === 'next' ? 27 : (isRoot ? 32 : 48);
+      const labelHeight = 12;
       let group = edgeEls.get(key);
 
       if (!group) {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `edge-group edge-group--${field}`);
+        g.setAttribute('class', `edge-group edge-group--${edgeType}`);
         g.dataset.edgeKey = key;
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -2248,7 +4607,6 @@
 
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         label.setAttribute('class', 'edge-label');
-        label.textContent = field;
         g.appendChild(label);
 
         dom.edgeLayer.appendChild(g);
@@ -2260,15 +4618,17 @@
       const path = group.querySelector('path');
       const labelBg = group.querySelector('.edge-label-bg');
       const label = group.querySelector('.edge-label');
-      const labelWidth = field === 'child' ? 32 : 27;
-      const labelHeight = 12;
 
       path.setAttribute('d', geometry.d);
       path.setAttribute(
         'marker-end',
-        isHot ? 'url(#arrow-hot)' : (field === 'child' ? 'url(#arrow-child)' : 'url(#arrow-next)')
+        isHot ? 'url(#arrow-hot)' : (
+          field === 'next' ? 'url(#arrow-next)' :
+            (isRoot ? 'url(#arrow-root)' : 'url(#arrow-child)')
+        )
       );
 
+      label.textContent = labelText;
       labelBg.setAttribute('x', String(geometry.labelX - labelWidth / 2));
       labelBg.setAttribute('y', String(geometry.labelY - labelHeight / 2));
       labelBg.setAttribute('width', String(labelWidth));
@@ -2296,17 +4656,20 @@
     }
 
     function updateDiagramSummary(step) {
+      const root = step.nodes.find((node) => node.root || node.tag === ROOT);
       const lists = step.nodes.filter((node) => node.tag === LIST).length;
       const atoms = step.nodes.filter((node) => node.tag === ATOM).length;
-      const pending = step.nodes.filter((node) => !node.tag).length;
-      const pieces = [`${step.nodes.length} 个节点`, `${lists} 个表`, `${atoms} 个原子`];
-      if (pending) pieces.push(`${pending} 个待设 tag`);
+      const pieces = [
+        root ? root.name + '（GList）' : 'GList',
+        `${atoms} 个 element`,
+        `${lists} 个 sublist`
+      ];
       dom.diagramSummary.textContent = pieces.join(' · ');
     }
 
     function renderLayerGuides(step) {
       dom.layerLayer.replaceChildren();
-      if (!state.run || state.operation !== 'depth') return;
+      if (!state.run || state.run.operation !== 'depth') return;
 
       const positions = state.run.layout.positions;
       const rowMap = new Map();
@@ -2321,7 +4684,7 @@
       });
 
       const rows = Array.from(rowMap.keys()).sort((a, b) => a - b);
-      const currentId = step.variables && step.variables.current;
+      const currentId = step.variables && (step.variables.current || step.variables.p || step.variables.L);
       const currentPos = currentId && positions[currentId];
 
       const fragment = document.createDocumentFragment();
@@ -2355,24 +4718,40 @@
       }
 
       const vars = step.variables || {};
+      const operation = state.run.operation;
       let text = '';
 
-      if (state.operation === 'length' && vars.len != null) {
+      if (operation === 'build' && vars['已建'] != null) {
+        text = `已建 ${vars['已建']} 个结点`;
+      } else if (operation === 'length' && vars.len != null) {
         text = `len = ${vars.len}`;
-      } else if (state.operation === 'depth') {
+      } else if (operation === 'depth') {
         const parts = [];
-        if (vars.childDepth != null) parts.push(`child = ${vars.childDepth}`);
-        if (vars.maxDepth != null) parts.push(`max = ${vars.maxDepth}`);
+        if (vars.d != null) parts.push(`d = ${vars.d}`);
+        if (vars.max != null) parts.push(`max = ${vars.max}`);
         if (vars.depth != null) parts.push(`depth = ${vars.depth}`);
         text = parts.length ? parts.join(' · ') : 'depth 计算中…';
       }
 
       dom.canvasMetric.hidden = !text;
       dom.canvasMetric.textContent = text;
-      dom.canvasMetric.classList.toggle('is-depth', state.operation === 'depth');
+      dom.canvasMetric.classList.toggle('is-depth', operation === 'depth');
     }
 
     function renderDiagram(step) {
+      if (state.run && state.run.compare) {
+        if (state.storage === 'headtail') renderHTComparison(step);
+        else renderComparison(step);
+        return;
+      }
+
+      if (state.storage === 'headtail') {
+        renderHTDiagram(step);
+        return;
+      }
+
+      hideHTView();
+      hideCompareView();
       renderLayerGuides(step);
       renderNodes(step);
       renderEdges(step);
@@ -2391,6 +4770,14 @@
 
     function fitStage() {
       if (!state.run || !dom.diagramStage) return;
+      if (state.run.compare) {
+        fitCompare();
+        return;
+      }
+      if (state.storage === 'headtail') {
+        fitHTStage();
+        return;
+      }
       const layout = state.run.layout;
       const stageWidth = layout.width;
       const stageHeight = layout.height;
@@ -2471,10 +4858,10 @@
 
       if (returned) {
         dom.returnNodeChip.hidden = false;
-        const kind = returned.tag === ATOM ? 'ATOM' : 'LIST';
-        const value = returned.tag === ATOM ? returned.value : '表';
-        dom.returnNodeChip.textContent = `返回节点 ${returned.id} · ${kind} ${value}`;
-        dom.returnNodeChip.title = `当前返回节点：${returned.id}`;
+        const kind = returned.tag === ATOM ? 'element' : 'sublist';
+        const value = returned.tag === ATOM ? returned.value : '子表';
+        dom.returnNodeChip.textContent = `返回结点 ${returned.id} · ${kind} ${value}`;
+        dom.returnNodeChip.title = `当前返回结点：${returned.id}`;
       } else {
         dom.returnNodeChip.hidden = true;
         dom.returnNodeChip.textContent = '';
@@ -2483,8 +4870,15 @@
 
     function renderStepDescription(step) {
       dom.stepDesc.textContent = step.desc;
-      dom.stepCounter.textContent = `${state.stepIndex + 1} / ${state.run.total}`;
 
+      if (step.base) {
+        dom.stepCounter.textContent = '—';
+        dom.codeHint.textContent = '等待选择函数…';
+        dom.codeHint.title = '';
+        return;
+      }
+
+      dom.stepCounter.textContent = `${state.stepIndex + 1} / ${state.run.total}`;
       const source = state.run.codeBlock.lines[step.codeLine - 1] || '';
       const summary = source.trim() || '空行';
       dom.codeHint.textContent = `第 ${step.codeLine} 行 · ${summary}`;
@@ -2501,7 +4895,11 @@
       renderStepDescription(step);
       renderVariables(step);
       renderResult(step);
-      setActiveCodeLine(step.codeLine, true);
+      if (step.base) {
+        clearActiveCodeLine();
+      } else {
+        setActiveCodeLine(step.codeLine, true);
+      }
       renderDiagram(step);
       updatePlaybackUI();
     }
@@ -2584,26 +4982,29 @@
       const run = state.run;
       const total = run ? run.steps.length : 0;
       const last = total - 1;
-      const atStart = !run || state.stepIndex <= 0;
-      const atEnd = !run || total === 0 || state.stepIndex >= last;
+      const isBase = !!(run && run.base);
+      const atStart = !run || isBase || state.stepIndex <= 0;
+      const atEnd = !run || isBase || total === 0 || state.stepIndex >= last;
 
       dom.resetBtn.disabled = atStart;
       dom.rewindBtn.disabled = atStart;
       dom.prevBtn.disabled = atStart;
       dom.nextBtn.disabled = atEnd;
       dom.forwardBtn.disabled = atEnd;
-      dom.playPauseBtn.disabled = !run;
+      dom.playPauseBtn.disabled = !run || isBase;
 
-      dom.progressSlider.disabled = !run;
+      dom.progressSlider.disabled = !run || isBase;
       dom.progressSlider.max = String(Math.max(0, last));
-      dom.progressSlider.value = String(run ? state.stepIndex : 0);
+      dom.progressSlider.value = String(run && !isBase ? state.stepIndex : 0);
       dom.progressSlider.setAttribute(
         'aria-valuetext',
-        run ? `第 ${state.stepIndex + 1} 步，共 ${total} 步` : '无步骤'
+        isBase ? '案例已载入，等待选择函数' : (run ? `第 ${state.stepIndex + 1} 步，共 ${total} 步` : '无步骤')
       );
 
       dom.playPauseBtn.classList.toggle('is-playing', state.playing);
-      if (state.playing) {
+      if (isBase) {
+        dom.playPauseBtn.textContent = '▶ 播放';
+      } else if (state.playing) {
         dom.playPauseBtn.textContent = '⏸ 暂停';
       } else if (run && atEnd) {
         dom.playPauseBtn.textContent = '↻ 重播';
@@ -2611,71 +5012,43 @@
         dom.playPauseBtn.textContent = '▶ 播放';
       }
 
-      dom.stepCounter.textContent = run ? `${state.stepIndex + 1} / ${total}` : '0 / 0';
-      dom.stepProgressText.textContent = run
-        ? `第 ${state.stepIndex + 1} 步 / 共 ${total} 步`
-        : '—';
-    }
-
-    function resetToReady(message) {
-      stopPlayback();
-      state.run = null;
-      state.stepIndex = 0;
-
-      clearDiagram();
-      clearActiveCodeLine();
-
-      dom.stepDesc.textContent = message || READY_MESSAGES[state.operation];
-      dom.stepCounter.textContent = '0 / 0';
-      dom.codeHint.textContent = '等待开始…';
-      dom.codeHint.title = '';
-      dom.resultValue.textContent = '—';
-      dom.resultValue.classList.remove('is-error');
-      dom.returnNodeChip.hidden = true;
-      dom.returnNodeChip.textContent = '';
-
-      const placeholder = document.createElement('span');
-      placeholder.className = 'muted';
-      placeholder.textContent = '暂无变量';
-      dom.variablesList.replaceChildren(placeholder);
-
-      updatePlaybackUI();
-    }
-
-    function startPresentation(event) {
-      if (event) event.preventDefault();
-      stopPlayback();
-
-      try {
-        const run = generateRun(dom.exprInput.value, state.operation);
-        state.run = run;
-        state.stepIndex = 0;
-        clearError();
-        showStep(0);
-        state.playing = true;
-        updatePlaybackUI();
-        scheduleNextStep();
-      } catch (err) {
-        resetToReady(READY_MESSAGES[state.operation]);
-        showError(describeError(err));
-      }
+      dom.stepCounter.textContent = isBase ? '—' : (run ? `${state.stepIndex + 1} / ${total}` : '0 / 0');
+      dom.stepProgressText.textContent = isBase
+        ? '案例已载入'
+        : (run ? `第 ${state.stepIndex + 1} 步 / 共 ${total} 步` : '—');
     }
 
     /* -------- 事件绑定 -------- */
 
-    dom.runnerForm.addEventListener('submit', startPresentation);
+    dom.caseForm.addEventListener('submit', saveCase);
 
-    dom.operationSelect.addEventListener('change', () => {
-      clearError();
-      selectOperation(dom.operationSelect.value);
+    dom.functionButtons.addEventListener('click', (event) => {
+      const button = event.target.closest('.fn-btn');
+      if (!button || button.disabled) return;
+      applyOperation(button.dataset.operation);
     });
 
-    dom.exprInput.addEventListener('input', () => {
+    dom.undoChainBtn.addEventListener('click', undoChain);
+    dom.resetChainBtn.addEventListener('click', resetChain);
+
+    function updateDraftHint() {
       clearError();
-      if (state.run && dom.exprInput.value !== state.run.expression) {
-        resetToReady('表达式已修改。点击“开始演示”重新生成步骤。');
+      const active = state.activeCaseIndex >= 0 ? state.cases[state.activeCaseIndex] : null;
+      if (!active) {
+        setCaseFeedback('');
+        return;
       }
-    });
+      const name = dom.caseNameInput.value.trim();
+      const expression = dom.exprInput.value.trim();
+      if (name !== active.name || expression !== active.expression) {
+        setCaseFeedback('草稿未保存；函数链仍作用于案例 ' + active.name, 'warning');
+      } else {
+        setCaseFeedback('');
+      }
+    }
+
+    dom.exprInput.addEventListener('input', updateDraftHint);
+    dom.caseNameInput.addEventListener('input', updateDraftHint);
 
     dom.resetBtn.addEventListener('click', resetPlayback);
     dom.rewindBtn.addEventListener('click', () => stepBy(-5));
@@ -2709,6 +5082,28 @@
       }
     });
 
+    dom.storageBtns.forEach((button) => {
+      button.addEventListener('click', () => setStorage(button.dataset.storage));
+    });
+    dom.themeToggle.addEventListener('click', () => {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+    dom.buildCaseBtn.addEventListener('click', startBuild);
+    dom.compareCasesBtn.addEventListener('click', openCompareModal);
+    dom.compareStartBtn.addEventListener('click', startComparison);
+    dom.compareCloseBtn.addEventListener('click', closeCompareModal);
+    dom.compareCancelBtn.addEventListener('click', closeCompareModal);
+    dom.compareCloseBackdrop.addEventListener('click', closeCompareModal);
+    dom.compareSelectA.addEventListener('change', updateCompareHint);
+    dom.compareSelectB.addEventListener('change', updateCompareHint);
+    dom.compareExitBtn.addEventListener('click', exitCompareToActive);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !dom.compareModal.hidden) {
+        event.preventDefault();
+        closeCompareModal();
+      }
+    });
+
     if (typeof ResizeObserver !== 'undefined') {
       const observer = new ResizeObserver(() => scheduleFit());
       observer.observe(dom.diagramViewport);
@@ -2717,11 +5112,12 @@
 
     /* -------- 初始化 -------- */
 
-    buildCodeNav();
-    renderCodeBlock(state.operation);
-    dom.exprInput.value = '(a,(b,c),d)';
-    resetToReady(READY_MESSAGES[state.operation]);
-    updatePlaybackUI();
+    dom.typeDefCode.textContent = TYPE_DEFINITION_SOURCE;
+    state.cases = DEFAULT_CASES.map((item) => ({ ...item }));
+    applyTheme(currentTheme(), false);
+    updateStorageUI();
+    renderCaseChips();
+    loadCase(0);
   }
 
   /* ===========================================================
@@ -2731,17 +5127,37 @@
   const GLGameCore = {
     ATOM,
     LIST,
+    ROOT,
+    TYPE_DEFINITION_SOURCE,
+    HT_TYPE_DEFINITION_SOURCE,
     CODE_BLOCKS,
     OPERATIONS,
     STUDY_QUESTIONS,
     QUIZ_CATEGORIES,
     parseExpression,
-    generateRun,
-    generateOperationSteps,
-    buildLayout,
+    serializeChain,
     serializeGraph,
     serializeNodeValue,
+    createBaseSubject,
+    createBaseView,
+    createOperationRun,
+    createBuildRun,
+    createCompareRun,
+    createHTBaseView,
+    createHTOperationRun,
+    createHTBuildRun,
+    createHTCompareRun,
+    evaluateOperation,
+    generateOperationSteps,
+    generateBuildSteps,
+    generateCompareSteps,
+    buildLayout,
+    buildHTGraph,
+    buildHTLayout,
+    serializeHTGraph,
+    serializeHTList,
     makeStep,
+    makeHTStep,
     describeError,
     isAtomChar,
     ParseError

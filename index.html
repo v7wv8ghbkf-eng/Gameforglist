@@ -3,8 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
-  <title>广义表探险 · 扩展链表分步可视化</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eef3f8" id="themeColorMeta">
+  <title>广义表探险 · 双存储结构 / 创建 / 判等</title>
+  <script>
+    (() => {
+      try {
+        const saved = localStorage.getItem('glist-theme');
+        if (saved === 'dark' || saved === 'light') {
+          document.documentElement.dataset.theme = saved;
+          if (saved === 'dark') {
+            document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0a1120');
+          }
+        }
+      } catch (_) {}
+    })();
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,10 +29,25 @@
           <div class="brand-mark" aria-hidden="true">GL</div>
           <div class="brand-copy">
             <h1>广义表探险</h1>
-            <p>拓展链表型广义表 · 先看步骤，再看代码</p>
+            <p>双存储结构 · 创建 / 取头尾 / 判等 · 分步可视化</p>
           </div>
         </div>
         <div class="header-actions">
+          <div class="storage-switch" role="group" aria-label="选择广义表存储结构">
+            <span class="storage-switch__label">存储结构</span>
+            <button class="storage-btn is-active" type="button" data-storage="linear" aria-pressed="true">扩展线性</button>
+            <button class="storage-btn" type="button" data-storage="headtail" aria-pressed="false">头尾链表</button>
+          </div>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false" title="切换到深色模式">
+            <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path>
+            </svg>
+            <span class="theme-toggle__label">深色</span>
+          </button>
           <div class="header-pills" aria-label="功能摘要">
             <span class="pill">步骤快照</span>
             <span class="pill">C 核心代码</span>
@@ -57,8 +86,9 @@
             placeholder="例如：(a,(b,c),d)"
           >
         </label>
+        <button id="buildCaseBtn" class="btn btn-tool" type="button" title="逐步演示 BuildList 创建当前广义表">创建</button>
+        <button id="compareCasesBtn" class="btn btn-tool" type="button" title="选择两个已命名案例，比较结构、tag 与 data">判等</button>
         <button id="saveCaseBtn" class="btn btn-primary" type="submit">保存 / 更新案例</button>
-        <button id="newCaseBtn" class="btn btn-ghost" type="button">新建</button>
         <span id="caseFeedback" class="case-feedback" aria-live="polite"></span>
       </form>
 
@@ -67,8 +97,8 @@
       <section class="function-strip" aria-label="广义表函数链与返回值">
         <div class="function-buttons" id="functionButtons">
           <span class="strip-label">函数链</span>
-          <button class="btn fn-btn" type="button" data-operation="head" title="取当前表的第一个元素">GetHead</button>
-          <button class="btn fn-btn" type="button" data-operation="tail" title="取当前表首元素之后的剩余表">GetTail</button>
+          <button class="btn fn-btn" type="button" data-operation="head" title="取当前表的第一个元素；可连续调用逐层取表头">GetHead</button>
+          <button class="btn fn-btn" type="button" data-operation="tail" title="取当前表首元素之后的剩余表；可连续调用逐层取表尾">GetTail</button>
           <button class="btn fn-btn" type="button" data-operation="length" title="求当前表的顶层长度">求长度</button>
           <button class="btn fn-btn" type="button" data-operation="depth" title="求当前表的深度">求深度</button>
           <span class="function-separator" aria-hidden="true"></span>
@@ -76,8 +106,14 @@
           <button id="resetChainBtn" class="btn btn-control" type="button" title="回到当前命名案例">重置链</button>
         </div>
         <div class="chain-view">
-          <span class="chain-caption">返回值</span>
-          <div id="chainTrail" class="chain-trail" aria-live="polite"></div>
+          <div class="chain-row">
+            <span class="chain-caption">返回值</span>
+            <div id="chainTrail" class="chain-trail" aria-live="polite"></div>
+          </div>
+          <div id="chainExpression" class="chain-expression" aria-live="polite">
+            <span class="chain-expression__label">当前对象</span>
+            <code class="chain-expression__value">A</code>
+          </div>
         </div>
       </section>
     </header>
@@ -89,7 +125,7 @@
             <span class="eyebrow">当前步骤</span>
             <span id="stepCounter" class="step-counter">0 / 0</span>
           </div>
-          <p id="stepDesc" class="step-desc">选择一个命名案例，再从函数链中选择 GetHead、GetTail、求长度或求深度。</p>
+          <p id="stepDesc" class="step-desc">选择命名案例后，可播放 BuildList 创建过程，执行 GetHead / GetTail / 求长度 / 求深度，或比较两个案例。</p>
           <p class="code-hint-row">
             <span class="code-hint-label">高亮代码</span>
             <code id="codeHint">等待开始…</code>
@@ -102,12 +138,19 @@
               <span class="eyebrow">节点图</span>
               <span id="diagramSummary" class="diagram-summary">尚未生成</span>
             </div>
-            <div class="legend" aria-label="图例">
+            <div id="linearLegend" class="legend" aria-label="扩展线性链表图例">
               <span class="legend-item"><i class="legend-dot legend-dot-atom"></i>element</span>
               <span class="legend-item"><i class="legend-dot legend-dot-list"></i>sublist</span>
               <span class="legend-item"><i class="legend-line legend-line-root"></i>GList</span>
               <span class="legend-item"><i class="legend-line legend-line-child"></i>sub_list</span>
               <span class="legend-item"><i class="legend-line legend-line-next"></i>next</span>
+            </div>
+            <div id="htLegend" class="legend" aria-label="头尾链表图例" hidden>
+              <span class="legend-item"><i class="legend-dot legend-dot-atom"></i>ATOM</span>
+              <span class="legend-item"><i class="legend-dot legend-dot-list"></i>LIST</span>
+              <span class="legend-item"><i class="legend-line legend-line-root"></i>GList</span>
+              <span class="legend-item"><i class="legend-line legend-line-child"></i>hp</span>
+              <span class="legend-item"><i class="legend-line legend-line-next"></i>tp</span>
             </div>
           </div>
           <div id="diagramViewport" class="diagram-viewport">
@@ -116,27 +159,69 @@
               <svg id="edgeLayer" class="edge-layer" aria-hidden="true">
                 <defs>
                   <marker id="arrow-root" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path>
+                    <path class="edge-marker edge-marker--root" d="M 0 0 L 10 5 L 0 10 z"></path>
                   </marker>
                   <marker id="arrow-child" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"></path>
+                    <path class="edge-marker edge-marker--child" d="M 0 0 L 10 5 L 0 10 z"></path>
                   </marker>
                   <marker id="arrow-next" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#b45309"></path>
+                    <path class="edge-marker edge-marker--next" d="M 0 0 L 10 5 L 0 10 z"></path>
                   </marker>
                   <marker id="arrow-hot" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"></path>
+                    <path class="edge-marker edge-marker--hot" d="M 0 0 L 10 5 L 0 10 z"></path>
                   </marker>
                 </defs>
               </svg>
               <div id="nodeLayer" class="node-layer"></div>
               <div id="laneLabel" class="lane-label" hidden>返回值</div>
             </div>
+            <div id="htCanvas" class="ht-canvas" hidden>
+              <div id="htStage" class="ht-stage">
+                <svg id="htEdgeLayer" class="ht-edge-layer" aria-hidden="true"></svg>
+                <div id="htNodeLayer" class="ht-node-layer"></div>
+              </div>
+            </div>
             <div id="canvasMetric" class="canvas-metric" hidden></div>
+            <div id="compareCanvas" class="compare-canvas" hidden>
+              <div class="compare-banner">
+                <div class="compare-banner__title">
+                  <span class="compare-kicker">判等过程</span>
+                  <strong id="compareTitle">A ↔ B</strong>
+                </div>
+                <span id="compareCurrent" class="compare-current">准备比较</span>
+                <button id="compareExitBtn" class="btn btn-control compare-exit" type="button" title="退出判等，回到当前案例">退出</button>
+              </div>
+              <div class="compare-panels">
+                <section class="compare-panel" aria-label="左侧广义表">
+                  <header class="compare-panel__head">
+                    <span id="compareNameA" class="compare-panel__name">A</span>
+                    <span id="compareValueA" class="compare-panel__value"></span>
+                  </header>
+                  <div id="compareViewportA" class="compare-viewport">
+                    <div id="compareStageA" class="compare-stage">
+                      <svg id="compareEdgeLayerA" class="compare-edge-layer" aria-hidden="true"></svg>
+                      <div id="compareNodeLayerA" class="compare-node-layer"></div>
+                    </div>
+                  </div>
+                </section>
+                <section class="compare-panel" aria-label="右侧广义表">
+                  <header class="compare-panel__head">
+                    <span id="compareNameB" class="compare-panel__name">B</span>
+                    <span id="compareValueB" class="compare-panel__value"></span>
+                  </header>
+                  <div id="compareViewportB" class="compare-viewport">
+                    <div id="compareStageB" class="compare-stage">
+                      <svg id="compareEdgeLayerB" class="compare-edge-layer" aria-hidden="true"></svg>
+                      <div id="compareNodeLayerB" class="compare-node-layer"></div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
             <div id="canvasEmpty" class="canvas-empty">
               <span class="canvas-empty-mark" aria-hidden="true">( )</span>
               <strong>节点图等待载入</strong>
-              <p>从上方选择一个命名案例，再从函数链执行 GetHead / GetTail / 求长度 / 求深度。</p>
+              <p>选择命名案例后，可播放“创建”过程，或执行 GetHead / GetTail / 求长度 / 求深度；也可以点击“判等”比较两个案例。</p>
             </div>
           </div>
         </section>
@@ -197,17 +282,17 @@
           <span id="codeTotal" class="code-total">— 行</span>
         </div>
         <details id="typeDefDetails" class="type-def" open>
-          <summary>广义表类型定义（与题目代码一致）</summary>
+          <summary id="typeDefSummary">广义表类型定义（与题目代码一致）</summary>
           <pre id="typeDefCode" class="type-def__code"></pre>
         </details>
         <div id="codeScroll" class="code-scroll" tabindex="0" aria-label="可滚动的当前操作核心代码">
           <div id="codeLines" class="code-lines"></div>
           <div id="codeEmpty" class="code-empty">
             <strong>当前还没有执行函数</strong>
-            <span>从上方函数链选择 GetHead、GetTail、求长度或求深度，这里会显示对应核心代码。</span>
+            <span>点击案例名旁的“创建”或“判等”，或从函数链选择 GetHead、GetTail、求长度、求深度，这里会显示对应核心代码。</span>
           </div>
         </div>
-        <p class="code-footnote">只显示操作函数，不使用辅助函数；上方定义中包含 <code>ElemSet</code>、<code>element / sublist</code> 和 <code>sub_list</code>。代码行号与左侧步骤一一对应。</p>
+        <p class="code-footnote">只显示当前创建 / 操作 / 判等函数，不使用辅助函数；C 定义见上方。输入框负责构造案例，单字符原子会映射为整型 <code>ElemSet</code> 代号；代码行号与左侧步骤一一对应。</p>
       </aside>
     </main>
   </div>
@@ -227,6 +312,36 @@
       <div id="quizList" class="quiz-list"></div>
       <footer class="quiz-footer">
         <strong>深度口径提示：</strong>左侧动画采用“层数口径”（原子计 1 层）；教材的“括号重数口径”通常会少一层。题目答案中会注明两种口径。
+      </footer>
+    </section>
+  </div>
+
+  <div id="compareModal" class="quiz-modal compare-modal" hidden>
+    <div class="quiz-backdrop" data-compare-close></div>
+    <section class="compare-dialog" role="dialog" aria-modal="true" aria-labelledby="compareTitleModal" aria-describedby="compareIntro">
+      <header class="quiz-header">
+        <div class="quiz-heading">
+          <span class="eyebrow">结构判等 · 同步遍历</span>
+          <h2 id="compareTitleModal">比较两个广义表</h2>
+          <p id="compareIntro">选择左右两个案例。判定会同步比较 tag、data 与 sub_list 的递归结构。</p>
+        </div>
+        <button id="compareCloseBtn" class="btn btn-ghost quiz-close" type="button" aria-label="关闭判等选择">关闭</button>
+      </header>
+      <div class="compare-form">
+        <label class="compare-field" for="compareSelectA">
+          <span class="field-label">左侧案例</span>
+          <select id="compareSelectA"></select>
+        </label>
+        <span class="compare-vs" aria-hidden="true">↔</span>
+        <label class="compare-field" for="compareSelectB">
+          <span class="field-label">右侧案例</span>
+          <select id="compareSelectB"></select>
+        </label>
+        <p id="compareHint" class="compare-hint">两个案例都会按当前保存的表达式重新解析。</p>
+      </div>
+      <footer class="compare-footer">
+        <button id="compareCancelBtn" class="btn btn-ghost" type="button">取消</button>
+        <button id="compareStartBtn" class="btn btn-primary" type="button">开始判等</button>
       </footer>
     </section>
   </div>
